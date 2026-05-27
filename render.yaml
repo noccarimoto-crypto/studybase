@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: studybase
+    runtime: node
+    buildCommand: apt-get update && apt-get install -y tesseract-ocr tesseract-ocr-jpn poppler-utils && yarn install
+    startCommand: node server.js
+    disk:
+      name: data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
