@@ -273,7 +273,7 @@ function renderThreads(threads) {
         <div class="thread-name">${t.name}</div>
         <div class="thread-meta">資料 ${t.docCount}件 (有効 ${t.activeDocs}件)</div>
       </div>
-      <span class="badge ${t.active ? 'badge-green' : 'badge-gray'}">${t.active ? '公開中' : 'アーカイブ'}</span>
+      <span class="badge ${t.active ? 'badge-green' : 'badge-gray'}" style="cursor:pointer" title="クリックで切り替え" onclick="event.stopPropagation();quickToggleThread('${t.id}',${t.active})">${t.active ? '公開中' : '非公開'}</span>
     </div>`).join('');
 }
 
@@ -283,12 +283,12 @@ async function selectThread(id) {
   currentThread = threads.find(t => t.id === id);
   if (!currentThread) return;
   document.getElementById('detailName').textContent = currentThread.name;
-  document.getElementById('detailMeta').textContent = currentThread.active ? '公開中' : 'アーカイブ中';
+  document.getElementById('detailMeta').textContent = currentThread.active ? '公開中' : '非公開';
   document.getElementById('chatUrl').textContent = `${window.location.origin}/chat.html?thread=${id}`;
   document.getElementById('docPanelTitle').textContent = currentThread.name + ' の資料';
   const btn = document.getElementById('archiveBtn');
-  if (!currentThread.active) { btn.textContent = '公開に戻す'; btn.className = 'btn btn-ghost btn-sm'; }
-  else { btn.textContent = 'アーカイブ'; btn.className = 'btn btn-danger btn-sm'; }
+  if (!currentThread.active) { btn.textContent = '公開する'; btn.className = 'btn btn-ghost btn-sm'; }
+  else { btn.textContent = '非公開'; btn.className = 'btn btn-danger btn-sm'; }
   renderThreads(threads);
   await loadDocs(id);
 }
@@ -409,7 +409,7 @@ async function toggleArchive() {
   if (!currentThread) return;
   const newActive = !currentThread.active;
   await fetch(API + '/api/threads/' + currentThread.id, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ active: newActive }) });
-  notify(newActive ? '公開しました' : 'アーカイブしました');
+  notify(newActive ? '公開しました' : '非公開にしました');
   await loadAll();
 }
 
@@ -421,6 +421,12 @@ function copyUrl() {
 function openChatPreview() {
   if (!currentThread) return;
   window.open('chat.html?thread=' + currentThread.id, '_blank');
+}
+
+async function quickToggleThread(id, currentActive) {
+  await fetch(API + '/api/threads/' + id, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ active: !currentActive }) });
+  notify(!currentActive ? '公開しました' : '非公開にしました');
+  await loadAll();
 }
 
 document.querySelectorAll('.modal-bg').forEach(m => m.addEventListener('click', function(e){ if(e.target===this) this.classList.remove('open'); }));
