@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>サポートチャット — StudyBase</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f0f2f5;--surface:#fff;--surface2:#f8f8f8;
+  --text:#1a1a1a;--muted:#888;--subtle:#bbb;--border:#e8e8e8;
+  --accent:#2563eb;--accent-light:#eff4ff;--accent-dark:#1d4ed8;
+  --radius:18px;--radius-sm:10px;
+}
+body{font-family:'Noto Sans JP','DM Sans',sans-serif;background:var(--bg);display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.phone{width:390px;height:700px;background:var(--bg);border-radius:44px;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,0.18),0 0 0 1.5px rgba(0,0,0,0.08);display:flex;flex-direction:column;position:relative}
+.status-bar{background:var(--surface);padding:12px 24px 6px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 16px 12px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.bot-avatar{width:36px;height:36px;border-radius:50%;background:var(--accent-light);border:1.5px solid rgba(37,99,235,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.header-name{font-size:14px;font-weight:500;line-height:1.2}
+.header-status{font-size:11px;color:#22c55e;display:flex;align-items:center;gap:4px;margin-top:1px}
+.online-dot{width:6px;height:6px;background:#22c55e;border-radius:50%;display:inline-block}
+.thread-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:8px 14px;overflow-x:auto;display:flex;gap:6px;flex-shrink:0;scrollbar-width:none}
+.thread-bar::-webkit-scrollbar{display:none}
+.thread-chip{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:20px;font-size:12px;white-space:nowrap;cursor:pointer;flex-shrink:0;transition:all 0.15s;font-family:'DM Sans',sans-serif}
+.thread-chip.active{background:var(--accent);color:white;font-weight:500}
+.thread-chip.inactive{background:var(--surface2);color:var(--muted);border:1px solid var(--border)}
+.thread-chip.inactive:hover{background:var(--accent-light);color:var(--accent)}
+.messages{flex:1;overflow-y:auto;padding:16px 14px;display:flex;flex-direction:column;gap:12px;scrollbar-width:thin}
+.date-div{text-align:center;font-size:11px;color:var(--muted);background:rgba(0,0,0,0.05);display:inline-block;padding:3px 10px;border-radius:10px;margin:4px auto;align-self:center;font-family:'DM Sans',sans-serif}
+.msg-group{display:flex;flex-direction:column;gap:2px;animation:slideIn 0.2s ease}
+.msg-group.user{align-items:flex-end}
+.msg-group.ai{align-items:flex-start}
+@keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.msg-row{display:flex;align-items:flex-end;gap:6px}
+.msg-group.user .msg-row{flex-direction:row-reverse}
+.ai-icon{width:28px;height:28px;border-radius:50%;background:var(--accent-light);border:1px solid rgba(37,99,235,0.15);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;align-self:flex-end}
+.bubble{max-width:240px;padding:10px 14px;border-radius:var(--radius);font-size:13.5px;line-height:1.6;word-break:break-word}
+.msg-group.user .bubble{background:var(--accent);color:white;border-bottom-right-radius:4px}
+.msg-group.ai .bubble{background:var(--surface);color:var(--text);border-bottom-left-radius:4px;box-shadow:0 1px 2px rgba(0,0,0,0.06);border:1px solid var(--border)}
+.msg-time{font-size:10px;color:var(--subtle);margin-top:2px;padding:0 4px;font-family:'DM Sans',sans-serif}
+.source-tag{display:inline-flex;align-items:center;gap:4px;margin-top:6px;background:var(--accent-light);color:var(--accent);border-radius:6px;padding:3px 8px;font-size:10px;font-family:'DM Sans',sans-serif}
+.typing-bubble{background:var(--surface);border:1px solid var(--border);box-shadow:0 1px 2px rgba(0,0,0,0.06);padding:12px 16px;border-radius:var(--radius);border-bottom-left-radius:4px;display:flex;gap:4px;align-items:center}
+.typing-dot{width:7px;height:7px;background:var(--subtle);border-radius:50%;animation:bounce 1.1s infinite}
+.typing-dot:nth-child(2){animation-delay:0.18s}
+.typing-dot:nth-child(3){animation-delay:0.36s}
+@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+.suggestions{padding:0 14px 10px;flex-shrink:0}
+.suggestions-label{font-size:11px;color:var(--muted);margin-bottom:6px;font-family:'DM Sans',sans-serif}
+.suggestion-chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.suggestion-chips::-webkit-scrollbar{display:none}
+.suggestion{background:var(--surface);border:1px solid var(--border);color:var(--accent);padding:6px 12px;border-radius:20px;font-size:11.5px;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all 0.12s;font-family:'DM Sans',sans-serif}
+.suggestion:hover{background:var(--accent-light);border-color:rgba(37,99,235,0.3)}
+.input-area{background:var(--surface);border-top:1px solid var(--border);padding:10px 12px;display:flex;align-items:flex-end;gap:8px;flex-shrink:0}
+.input-wrap{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:22px;padding:9px 14px;display:flex;align-items:center;transition:border-color 0.15s}
+.input-wrap:focus-within{border-color:rgba(37,99,235,0.4);background:white}
+.msg-input{flex:1;border:none;background:none;font-size:14px;color:var(--text);outline:none;font-family:'Noto Sans JP',sans-serif;resize:none;line-height:1.4;max-height:80px}
+.msg-input::placeholder{color:var(--subtle)}
+.send-btn{width:38px;height:38px;border-radius:50%;background:var(--accent);color:white;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;transition:all 0.15s}
+.send-btn:hover{background:var(--accent-dark);transform:scale(1.05)}
+.send-btn:disabled{background:var(--subtle);cursor:default;transform:none}
+.err-banner{background:#fff3f3;border-bottom:1px solid #ffd5d5;padding:8px 16px;font-size:12px;color:#c0392b;display:none;flex-shrink:0}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status-bar">
+    <div style="font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif" id="clock">9:41</div>
+    <div style="font-size:11px;font-family:'DM Sans',sans-serif">WiFi 🔋</div>
+  </div>
+  <div class="header">
+    <div style="color:var(--accent);font-size:20px;cursor:pointer">‹</div>
+    <div class="bot-avatar">🎓</div>
+    <div style="flex:1">
+      <div class="header-name" id="headerName">サポートAI</div>
+      <div class="header-status"><span class="online-dot"></span>オンライン</div>
+    </div>
+  </div>
+  <div id="errBanner" class="err-banner"></div>
+  <div class="thread-bar" id="threadBar">
+    <div style="font-size:12px;color:var(--muted);align-self:center;font-family:'DM Sans',sans-serif">読み込み中...</div>
+  </div>
+  <div class="messages" id="messages"></div>
+  <div class="suggestions" id="suggestions" style="display:none">
+    <div class="suggestions-label">よくある質問</div>
+    <div class="suggestion-chips" id="suggestionChips"></div>
+  </div>
+  <div class="input-area">
+    <div class="input-wrap">
+      <textarea class="msg-input" id="msgInput" placeholder="メッセージを入力..." rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+    </div>
+    <button class="send-btn" id="sendBtn" onclick="sendMessage()">↑</button>
+  </div>
+</div>
+
+<script>
+const API = '';
+let currentThread = null;
+let chatHistory = [];
+let isTyping = false;
+
+// URLパラメータからスレッドID取得
+const urlParams = new URLSearchParams(window.location.search);
+const preselectedThread = urlParams.get('thread');
+
+// 時計
+function updateClock() {
+  const d = new Date();
+  document.getElementById('clock').textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+updateClock();
+setInterval(updateClock, 10000);
+
+function now() {
+  const d = new Date();
+  return d.getHours() + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+
+// デモ用スレッドデータ（サーバー未起動時に使用）
+const DEMO_THREADS = [
+  { id: 'demo_1', name: '○○塾 2026年度 コース案内', active: true },
+  { id: 'demo_2', name: '入試情報 2025', active: true },
+];
+const DEMO_REPLIES = [
+  { text: '【デモモード】サーバー未接続のため、サンプル回答をお届けします。\n\n2026年度の月謝はコースによって異なります。\n・基本コース：月額 18,000円\n・特進コース：月額 24,000円\n\n実際の運用時はサーバーに接続した資料をもとに回答します。', source: '（デモ）2026年度_学費案内.pdf' },
+  { text: '【デモモード】体験授業は毎月第2・第4土曜日に実施しています。Webフォームまたはお電話でお申し込みいただけます。', source: '（デモ）2026年度_案内.pdf' },
+  { text: '【デモモード】入塾手続きには申込書・保護者の身分証・初月分月謝が必要です。', source: null },
+];
+let demoReplyIdx = 0;
+let isDemo = false;
+
+async function loadThreads() {
+  try {
+    const res = await fetch(API + '/api/threads');
+    if (!res.ok) throw new Error('server error');
+    const threads = await res.json();
+    const active = threads.filter(t => t.active);
+    const bar = document.getElementById('threadBar');
+    if (!active.length) {
+      bar.innerHTML = '<div style="font-size:12px;color:var(--muted);font-family:\'DM Sans\',sans-serif">公開中のスレッドがありません</div>';
+      return;
+    }
+    isDemo = false;
+    bar.innerHTML = active.map(t =>
+      `<div class="thread-chip inactive" data-id="${t.id}" onclick="switchThread('${t.id}','${t.name}')">${t.name}</div>`
+    ).join('');
+    const first = preselectedThread && active.find(t => t.id === preselectedThread) ? preselectedThread : active[0].id;
+    const firstName = active.find(t => t.id === first)?.name || '';
+    switchThread(first, firstName);
+  } catch(e) {
+    // サーバー未起動 → デモモードで起動
+    isDemo = true;
+    const bar = document.getElementById('threadBar');
+    bar.innerHTML = DEMO_THREADS.map(t =>
+      `<div class="thread-chip inactive" data-id="${t.id}" onclick="switchThread('${t.id}','${t.name}')">${t.name}</div>`
+    ).join('');
+    showDemoBanner();
+    switchThread(DEMO_THREADS[0].id, DEMO_THREADS[0].name);
+  }
+}
+
+function showDemoBanner() {
+  const banner = document.getElementById('errBanner');
+  banner.style.background = '#fffbea';
+  banner.style.borderBottomColor = '#fde68a';
+  banner.style.color = '#92400e';
+  banner.textContent = '⚠ デモモード：サーバー未接続。チャットはサンプル回答を表示します。';
+  banner.style.display = 'block';
+}
+
+function showError(msg) {
+  const el = document.getElementById('errBanner');
+  el.textContent = '⚠ ' + msg;
+  el.style.display = 'block';
+}
+
+function switchThread(id, name) {
+  currentThread = id;
+  chatHistory = [];
+  document.querySelectorAll('.thread-chip').forEach(c => {
+    c.className = 'thread-chip ' + (c.dataset.id === id ? 'active' : 'inactive');
+  });
+  document.getElementById('headerName').textContent = name + ' サポートAI';
+  const messages = document.getElementById('messages');
+  messages.innerHTML = '';
+  addDateDiv('今日');
+  appendAiMsg(`こんにちは！${name}についてのご質問にお答えします。お気軽にどうぞ 😊`, null);
+  // サジェスト
+  document.getElementById('suggestions').style.display = 'block';
+  document.getElementById('suggestionChips').innerHTML = [
+    '料金を教えてください', 'コース内容は？', '体験授業はありますか？'
+  ].map(s => `<div class="suggestion" onclick="sendSuggestion('${s}')">${s}</div>`).join('');
+}
+
+function addDateDiv(text) {
+  const el = document.createElement('div');
+  el.className = 'date-div';
+  el.textContent = text;
+  document.getElementById('messages').appendChild(el);
+}
+
+function scrollBottom() {
+  const m = document.getElementById('messages');
+  m.scrollTop = m.scrollHeight;
+}
+
+function appendUserMsg(text) {
+  const m = document.getElementById('messages');
+  const g = document.createElement('div');
+  g.className = 'msg-group user';
+  g.innerHTML = `<div class="msg-row"><div class="bubble">${escHtml(text)}</div></div><div class="msg-time">${now()}</div>`;
+  m.appendChild(g);
+  scrollBottom();
+}
+
+function appendAiMsg(text, source) {
+  const m = document.getElementById('messages');
+  const g = document.createElement('div');
+  g.className = 'msg-group ai';
+  const src = source ? `<div class="source-tag">📄 ${escHtml(source)}</div>` : '';
+  g.innerHTML = `<div class="msg-row"><div class="ai-icon">🤖</div><div><div class="bubble">${escHtml(text)}${src}</div><div class="msg-time">${now()}</div></div></div>`;
+  m.appendChild(g);
+  scrollBottom();
+}
+
+function showTyping() {
+  const m = document.getElementById('messages');
+  const g = document.createElement('div');
+  g.className = 'msg-group ai'; g.id = 'typingEl';
+  g.innerHTML = `<div class="msg-row"><div class="ai-icon">🤖</div><div class="typing-bubble"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
+  m.appendChild(g); scrollBottom();
+}
+
+function removeTyping() {
+  const el = document.getElementById('typingEl');
+  if (el) el.remove();
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 80) + 'px';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+async function sendMessage() {
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if (!text || isTyping || !currentThread) return;
+  input.value = ''; input.style.height = 'auto';
+  isTyping = true;
+  document.getElementById('sendBtn').disabled = true;
+  document.getElementById('suggestions').style.display = 'none';
+  appendUserMsg(text);
+  chatHistory.push({ role: 'user', text });
+  showTyping();
+  try {
+    let data;
+    if (isDemo) {
+      await new Promise(r => setTimeout(r, 1200));
+      const r = DEMO_REPLIES[demoReplyIdx % DEMO_REPLIES.length];
+      demoReplyIdx++;
+      data = r;
+    } else {
+      const res = await fetch(API + '/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threadId: currentThread, message: text, history: chatHistory.slice(-10) })
+      });
+      data = await res.json();
+    }
+    removeTyping();
+    if (data.error) {
+      appendAiMsg('エラー: ' + data.error, null);
+    } else {
+      appendAiMsg(data.text, data.source);
+      chatHistory.push({ role: 'ai', text: data.text });
+    }
+  } catch(e) {
+    removeTyping();
+    appendAiMsg('エラーが発生しました: ' + e.message, null);
+  }
+  isTyping = false;
+  document.getElementById('sendBtn').disabled = false;
+}
+
+function sendSuggestion(text) {
+  document.getElementById('msgInput').value = text;
+  sendMessage();
+}
+
+loadThreads();
+</script>
+</body>
+</html>
