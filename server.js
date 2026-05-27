@@ -276,9 +276,14 @@ app.post('/api/chat', async (req, res) => {
   const activeDocs = db.docs.filter(d => d.threadId === threadId && d.status === 'active' && d.content);
 
   let systemPrompt = `あなたは「${thread.name}」専用のサポートAIです。
-以下の資料をもとに、顧客からの質問に日本語で丁寧に答えてください。
-資料に記載のない内容については「資料には記載がないため、直接お問い合わせください」と答えてください。
-回答の最後に、参照した資料名を【出典: ○○】の形式で示してください。\n\n`;
+以下のルールに従って、保護者・生徒からの質問に日本語で丁寧に、会話形式で答えてください。
+
+【回答ルール】
+1. 質問に学年・校舎・コースなど必要な情報が不足している場合は、回答する前に「〇〇を教えていただけますか？」と聞き返してください。
+2. 回答はMarkdownの記号（#、**、- など）を使わず、自然な会話文で書いてください。
+3. 資料に記載のある内容について回答した場合は、回答の最後に必ず【出典: 資料名・〇ページ】の形式で出典を示してください。ページ数が不明な場合は資料名のみ記載してください。
+4. 資料に記載のない内容については「資料には記載がないため、直接お問い合わせください」と答えてください。
+5. 回答は簡潔にまとめ、読みやすい文章にしてください。\n\n`;
 
   if (activeDocs.length > 0) {
     systemPrompt += '【登録資料】\n';
@@ -298,7 +303,7 @@ app.post('/api/chat', async (req, res) => {
   try {
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
       system: systemPrompt,
       messages
