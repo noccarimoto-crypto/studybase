@@ -3,14 +3,13 @@ const multer = require('multer');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const { execSync, exec } = require('child_process');
 const os = require('os');
 const Anthropic = require('@anthropic-ai/sdk');
 const pdfParse = require('pdf-parse');
-const Tesseract = require('tesseract.js');
-const { execSync } = require('child_process');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const DATA_FILE = path.join(__dirname, 'data', 'db.json');
@@ -19,6 +18,9 @@ const DOCS_DIR = path.join(__dirname, 'data', 'docs');
 if (!fs.existsSync(path.join(__dirname, 'data'))) fs.mkdirSync(path.join(__dirname, 'data'));
 if (!fs.existsSync(DOCS_DIR)) fs.mkdirSync(DOCS_DIR);
 
+// ----------------------------------------
+// DB
+// ----------------------------------------
 function loadDB() {
   if (!fs.existsSync(DATA_FILE)) {
     const init = {
@@ -36,7 +38,11 @@ function saveDB(db) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
 }
 
+// ----------------------------------------
+// PDF テキスト抽出（通常PDF → OCR PDF の順でフォールバック）
+// ----------------------------------------
 async function extractPdfText(filePath) {
+  // まず通常のテキスト抽出を試みる
   try {
     const buf = fs.readFileSync(filePath);
     const parsed = await pdfParse(buf);
@@ -49,49 +55,36 @@ async function extractPdfText(filePath) {
   } catch(e) {
     console.log('通常解析失敗、OCRを試みます:', e.message);
   }
-  return await ocrPdfWithTesseractJs(filePath);
+
+  // スキャンPDF: pdftoppm で画像化 → tesseract OCR
+  return await ocrPdf(filePath);
 }
 
-async function ocrPdfWithTesseractJs(filePath) {
+async function ocrPdf(filePath) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'studybase-ocr-'));
   const outBase = path.join(tmpDir, 'page');
 
   try {
-    // pdftoppmが使えるか確認
-    let hasPdftoppm = false;
-    try {
-      execSync('which pdftoppm', { timeout: 5000 });
-      hasPdftoppm = true;
-    } catch(e) {}
+    // PDFを画像に変換（300dpi）
+    execSync(`pdftoppm -r 300 -png "${filePath}" "${outBase}"`, { timeout: 120000 });
 
-    let pages = [];
-
-    if (hasPdftoppm) {
-      execSync(`pdftoppm -r 150 -png "${filePath}" "${outBase}"`, { timeout: 120000 });
-      pages = fs.readdirSync(tmpDir).filter(f => f.endsWith('.png')).sort();
-    } else {
-      // pdftoppmがない場合はpdf-parseで再試行（テキストが少なくても返す）
-      const buf = fs.readFileSync(filePath);
-      const parsed = await pdfParse(buf);
-      const text = parsed.text.trim();
-      if (text.length > 0) {
-        return { text, pageCount: parsed.numpages, method: 'text-fallback' };
-      }
-      throw new Error('PDFからテキストを抽出できませんでした。テキスト登録をお試しください。');
-    }
+    const pages = fs.readdirSync(tmpDir)
+      .filter(f => f.endsWith('.png'))
+      .sort();
 
     if (!pages.length) throw new Error('PDFを画像に変換できませんでした');
 
-    console.log(`tesseract.js OCR開始: ${pages.length}ページ`);
-    let fullText = '';
+    console.log(`OCR開始: ${pages.length}ページ`);
 
+    let fullText = '';
     for (const page of pages) {
       const imgPath = path.join(tmpDir, page);
+      const txtBase = path.join(tmpDir, page.replace('.png', ''));
       try {
-        const result = await Tesseract.recognize(imgPath, 'jpn+eng', {
-          logger: m => { if (m.status === 'recognizing text') console.log(`OCR進捗: ${Math.round(m.progress * 100)}%`); }
-        });
-        fullText += result.data.text + '\n';
+        // 日本語+英語でOCR
+        execSync(`tesseract "${imgPath}" "${txtBase}" -l jpn+eng --psm 3`, { timeout: 60000 });
+        const txt = fs.readFileSync(txtBase + '.txt', 'utf8');
+        fullText += txt + '\n';
       } catch(e) {
         console.log(`ページOCR失敗 (${page}):`, e.message);
       }
@@ -99,10 +92,14 @@ async function ocrPdfWithTesseractJs(filePath) {
 
     return { text: fullText.trim(), pageCount: pages.length, method: 'ocr' };
   } finally {
+    // 一時ファイル削除
     try { fs.rmSync(tmpDir, { recursive: true }); } catch(e) {}
   }
 }
 
+// ----------------------------------------
+// multer
+// ----------------------------------------
 const storage = multer.diskStorage({
   destination: DOCS_DIR,
   filename: (req, file, cb) => {
@@ -123,10 +120,16 @@ const upload = multer({
   }
 });
 
+// ----------------------------------------
+// ミドルウェア
+// ----------------------------------------
 app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 
+// ----------------------------------------
+// スレッド CRUD
+// ----------------------------------------
 app.get('/api/threads', (req, res) => {
   const db = loadDB();
   const threads = db.threads.map(t => {
@@ -168,6 +171,9 @@ app.delete('/api/threads/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ----------------------------------------
+// 資料 CRUD
+// ----------------------------------------
 app.get('/api/docs', (req, res) => {
   const db = loadDB();
   const { threadId } = req.query;
@@ -175,6 +181,7 @@ app.get('/api/docs', (req, res) => {
   res.json(docs);
 });
 
+// アップロード（PDF・TXT対応、スキャンPDFはOCR）
 app.post('/api/docs/upload', upload.single('file'), async (req, res) => {
   const { threadId } = req.body;
   if (!req.file || !threadId) return res.status(400).json({ error: 'file and threadId required' });
@@ -202,7 +209,7 @@ app.post('/api/docs/upload', upload.single('file'), async (req, res) => {
   }
 
   if (!content || content.length < 10) {
-    return res.status(400).json({ error: 'テキストを抽出できませんでした。テキスト登録をお試しください。' });
+    return res.status(400).json({ error: 'テキストを抽出できませんでした。' });
   }
 
   const db = loadDB();
@@ -223,6 +230,7 @@ app.post('/api/docs/upload', upload.single('file'), async (req, res) => {
   res.json(doc);
 });
 
+// テキスト直接登録
 app.post('/api/docs/text', (req, res) => {
   const { threadId, name, content } = req.body;
   if (!threadId || !name || !content) return res.status(400).json({ error: 'threadId, name, content required' });
@@ -264,6 +272,9 @@ app.delete('/api/docs/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ----------------------------------------
+// チャット（RAG）
+// ----------------------------------------
 app.post('/api/chat', async (req, res) => {
   const { threadId, message, history } = req.body;
   if (!message || !threadId) return res.status(400).json({ error: 'threadId and message required' });
@@ -279,7 +290,7 @@ app.post('/api/chat', async (req, res) => {
 以下のルールに従って、保護者・生徒からの質問に日本語で丁寧に、会話形式で答えてください。
 
 【回答ルール】
-1. 質問に学年・校舎・コースなど必要な情報が不足している場合は、不足している情報だけを1つ質問して、その返答を待ってください。「参考までに」「一般的には」などの形で情報を先出しすることは絶対禁止です。情報が完全に揃ってから初めて回答してください。
+1. 回答が校舎・学年・コースなどの条件によって変わる場合は、条件が1つに絞れるまで追加質問を繰り返してください。複数パターンの回答を並べることは絶対禁止です。「参考までに」「一般的には」などで情報を先出しすることも禁止です。条件が完全に確定してから、その条件に対応した回答だけを返してください。
 2. 回答はMarkdownの記号（#、**、- など）を使わず、自然な会話文で書いてください。
 3. 資料に記載のある内容について回答した場合は、回答の最後に必ず【出典: 資料名・〇ページ】の形式で出典を示してください。ページ数が不明な場合は資料名のみ記載してください。
 4. 資料に記載のない内容については「資料には記載がないため、直接お問い合わせください」と答えてください。
@@ -319,6 +330,9 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+// ----------------------------------------
+// 起動
+// ----------------------------------------
 app.listen(PORT, () => {
   console.log('');
   console.log('  ✅ StudyBase サーバー起動中');
@@ -327,5 +341,6 @@ app.listen(PORT, () => {
   console.log('');
   if (!ANTHROPIC_API_KEY) {
     console.log('  ⚠️  ANTHROPIC_API_KEY が未設定です。');
+    console.log('     .env ファイルに ANTHROPIC_API_KEY=sk-ant-... を追加してください。');
   }
 });
