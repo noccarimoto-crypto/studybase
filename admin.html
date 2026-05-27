@@ -284,7 +284,7 @@ async function selectThread(id) {
   if (!currentThread) return;
   document.getElementById('detailName').textContent = currentThread.name;
   document.getElementById('detailMeta').textContent = currentThread.active ? '公開中' : 'アーカイブ中';
-  document.getElementById('chatUrl').textContent = `http://localhost:3000/chat.html?thread=${id}`;
+  document.getElementById('chatUrl').textContent = `${window.location.origin}/chat.html?thread=${id}`;
   document.getElementById('docPanelTitle').textContent = currentThread.name + ' の資料';
   const btn = document.getElementById('archiveBtn');
   if (!currentThread.active) { btn.textContent = '公開に戻す'; btn.className = 'btn btn-ghost btn-sm'; }
