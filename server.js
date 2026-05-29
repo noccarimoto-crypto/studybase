@@ -73,17 +73,43 @@ async function generatePageImages(filePath, docId) {
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
   try {
-    // pdftoppm でPDFを各ページPNGに変換（150dpi、十分な品質）
+    // pdftoppm でPDFを各ページPNGに変換（150dpi）
     execSync(`pdftoppm -r 150 -png "${filePath}" "${path.join(outDir, 'page')}"`, {
       timeout: 120000
     });
 
     // 生成されたファイル一覧を取得
-    const files = fs.readdirSync(outDir)
+    let files = fs.readdirSync(outDir)
       .filter(f => f.endsWith('.png'))
       .sort();
 
-    console.log(`ページ画像生成完了: ${files.length}ページ (docId: ${docId})`);
+    // 見開き（横長）ページを左右に分割する
+    const sharp = require('sharp');
+    const splitFiles = [];
+    for (const file of files) {
+      const imgPath = path.join(outDir, file);
+      const meta = await sharp(imgPath).metadata();
+      // 横幅が縦の1.4倍以上なら見開きと判断して左右分割
+      if (meta.width > meta.height * 1.4) {
+        const half = Math.floor(meta.width / 2);
+        const baseName = file.replace('.png', '');
+        const leftFile  = baseName + '_L.png';
+        const rightFile = baseName + '_R.png';
+        await sharp(imgPath)
+          .extract({ left: 0, top: 0, width: half, height: meta.height })
+          .toFile(path.join(outDir, leftFile));
+        await sharp(imgPath)
+          .extract({ left: half, top: 0, width: meta.width - half, height: meta.height })
+          .toFile(path.join(outDir, rightFile));
+        fs.unlinkSync(imgPath);
+        splitFiles.push(leftFile, rightFile);
+      } else {
+        splitFiles.push(file);
+      }
+    }
+    files = splitFiles.sort();
+
+    console.log(`ページ画像生成完了: ${files.length}枚 (docId: ${docId})`);
     return files.length;
   } catch (e) {
     console.error('ページ画像生成エラー:', e.message);
@@ -285,17 +311,19 @@ app.post('/api/chat', async (req, res) => {
   const activeDocs = db.docs.filter(d => d.threadId === threadId && d.status === 'active' && d.content);
 
   let systemPrompt = `あなたは「${thread.name}」専用のサポートAIです。
-以下のルールに従って、顧客からの質問に日本語で丁寧に答えてください。
+以下のルールを必ず守って、顧客からの質問に日本語で丁寧に答えてください。
+
+【最優先ルール：コース・学年の確認】
+資料に複数のコースや学年・校舎などが含まれている場合、質問に対してどのコース・学年・校舎が対象か明確でないときは、絶対に回答内容を出さず、必ず先に「どのコース（または学年・校舎）についてのご質問でしょうか？」と確認してください。確認が取れてから初めて回答してください。
 
 【回答ルール】
 1. 登録された資料の内容をもとに回答してください。
 2. 回答はMarkdownの記号（#、**、- など）を使わず、自然な会話文で書いてください。
-3. 資料に複数のコースや学年・校舎などが含まれており、質問内容がどのコース・学年・校舎に関するものか不明な場合は、回答する前に「どのコース（または学年・校舎）についてのご質問でしょうか？」と確認してください。
-4. 資料に記載のある内容について回答した場合は、回答の最後に必ず以下の形式で出典を示してください：
+3. 資料に記載のある内容について回答した場合は、回答の最後に必ず以下の形式で出典を示してください：
    【出典: 資料名・Xページ】
    ※ページ番号は資料内の <!-- PAGE X --> マーカーを参照して特定してください。複数ページにまたがる場合は「X〜Yページ」としてください。
-5. 資料に記載のない内容については「資料には記載がないため、直接お問い合わせください」と答えてください。
-6. 質問が曖昧な場合は「〇〇を教えていただけますか？」と聞き返してください。
+4. 資料に記載のない内容については「資料には記載がないため、直接お問い合わせください」と答えてください。
+5. 質問が曖昧な場合は「〇〇を教えていただけますか？」と聞き返してください。
 
 `;
 
