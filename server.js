@@ -315,6 +315,7 @@ app.post('/api/chat', async (req, res) => {
 
 【最優先ルール：コース・学年の確認】
 資料に複数のコースや学年・校舎などが含まれている場合、質問に対してどのコース・学年・校舎が対象か明確でないときは、絶対に回答内容を出さず、必ず先に「どのコース（または学年・校舎）についてのご質問でしょうか？」と確認してください。確認が取れてから初めて回答してください。
+このルールは厳守です。少しでも曖昧さがある場合は必ず先に確認してください。「小5の日程は？」のような質問でも、複数コースがある場合は先にコースを確認してください。
 
 【回答ルール】
 1. 登録された資料の内容をもとに回答してください。
@@ -412,16 +413,37 @@ app.get('/api/page-image/:docId/:pageNum', (req, res) => {
     return res.status(404).json({ error: 'images not found' });
   }
 
-  // pdftoppmが生成するファイル名パターン: page-01.png, page-001.png など
   const files = fs.readdirSync(imgDir).filter(f => f.endsWith('.png')).sort();
-  const targetIdx = parseInt(pageNum) - 1;
+  const num = parseInt(pageNum);
 
-  if (targetIdx < 0 || targetIdx >= files.length) {
+  // page-8_L.png / page-8_R.png / page-8.png のいずれかを探す
+  // まず左ページ(L)を優先、なければ通常ページ、なければインデックスで取得
+  const padded2 = String(num).padStart(2, '0');
+  const padded3 = String(num).padStart(3, '0');
+  const candidates = [
+    `page-${num}_L.png`, `page-${padded2}_L.png`, `page-${padded3}_L.png`,
+    `page-${num}.png`,   `page-${padded2}.png`,   `page-${padded3}.png`,
+  ];
+
+  let found = null;
+  for (const c of candidates) {
+    if (files.includes(c)) { found = c; break; }
+  }
+
+  // 見つからなければインデックスで取得
+  if (!found) {
+    const targetIdx = num - 1;
+    if (targetIdx >= 0 && targetIdx < files.length) {
+      found = files[targetIdx];
+    }
+  }
+
+  if (!found) {
     return res.status(404).json({ error: 'page not found' });
   }
 
-  const imageUrl = `/page-images/${docId}/${files[targetIdx]}`;
-  res.json({ url: imageUrl, filename: files[targetIdx] });
+  const imageUrl = `/page-images/${docId}/${found}`;
+  res.json({ url: imageUrl, filename: found });
 });
 
 // ----------------------------------------
