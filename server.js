@@ -353,25 +353,29 @@ app.post('/api/chat', async (req, res) => {
 
     const rawText = response.content[0].text;
 
-    // 出典パース: 【出典: 資料名・Xページ】または【出典: 資料名・X〜Yページ】
-    const sourceMatch = rawText.match(/【出典[:：]\s*(.+?)・(\d+(?:〜\d+)?ページ?)】/);
+    // 出典パース（柔軟に対応）: 【出典: 資料名・Xページ】【出典: 資料名（Xページ）】など
+    const sourceMatch = rawText.match(/【出典[:：]\s*(.+?)[・・（(]\s*(\d+(?:[〜~]\d+)?\s*ページ?)[）)]?\s*】/);
     let source = null;
     let pageNum = null;
     let docId = null;
 
     if (sourceMatch) {
       const sourceDocName = sourceMatch[1].trim();
-      const pageStr = sourceMatch[2].replace('ページ', '').trim();
-      // 開始ページを取得（X〜Yページの場合はX）
-      pageNum = parseInt(pageStr.split('〜')[0]);
+      const pageStr = sourceMatch[2].replace(/ページ/g, '').trim();
+      pageNum = parseInt(pageStr.split(/[〜~]/)[0]);
 
-      // 対応するdocを検索
-      const matchedDoc = activeDocs.find(d => d.name === sourceDocName || d.name.includes(sourceDocName) || sourceDocName.includes(d.name));
+      const matchedDoc = activeDocs.find(d =>
+        d.name === sourceDocName ||
+        d.name.includes(sourceDocName) ||
+        sourceDocName.includes(d.name) ||
+        d.name.replace(/\.pdf$/i, '') === sourceDocName ||
+        sourceDocName.includes(d.name.replace(/\.pdf$/i, ''))
+      );
       if (matchedDoc) {
         docId = matchedDoc.id;
         source = {
           docName: matchedDoc.name,
-          pageLabel: sourceMatch[2],
+          pageLabel: sourceMatch[2].trim(),
           pageNum,
           docId,
           hasImages: matchedDoc.hasImages
@@ -379,8 +383,13 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    // 出典タグを本文から除去
-    const cleanText = rawText.replace(/【出典[:：].+?】/g, '').trim();
+    // 出典タグを本文から除去 + Markdown記号を除去
+    let cleanText = rawText.replace(/【出典[:：].+?】/g, '').trim();
+    cleanText = cleanText
+      .replace(/\*\*(.+?)\*\*/g, '$1')   // **太字** → 太字
+      .replace(/#{1,6}\s+/g, '')             // ## 見出し → 除去
+      .replace(/^[-*]\s+/gm, '・')           // - リスト → ・
+      .trim();
 
     res.json({ text: cleanText, source, threadName: thread.name });
   } catch (err) {
