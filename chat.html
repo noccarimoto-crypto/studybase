@@ -23,6 +23,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-ser
 .thread-select { flex: 1; border: 1px solid #c7c7cc; border-radius: 8px; padding: 6px 10px; font-size: 13px; background: #f9f9f9; outline: none; }
 .thread-select:focus { border-color: #0071e3; }
 
+/* 免責バナー */
+.disclaimer { background: #fff8e6; border-bottom: 1px solid #f0d080; padding: 8px 16px; font-size: 12px; color: #7a5c00; line-height: 1.5; flex-shrink: 0; }
+
 /* メッセージエリア */
 .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8e8e93; text-align: center; gap: 8px; }
@@ -50,7 +53,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-ser
 .source-icon { font-size: 14px; }
 .source-text { font-size: 12px; color: #3c3c43; line-height: 1.4; }
 .source-text strong { font-weight: 600; }
-.source-note { font-size: 11px; color: #8e8e93; margin-top: 2px; }
 .source-image-wrap { padding: 12px; }
 .source-image-wrap img { width: 100%; border-radius: 8px; border: 1px solid #e5e5ea; cursor: pointer; transition: opacity 0.2s; }
 .source-image-wrap img:hover { opacity: 0.9; }
@@ -99,6 +101,11 @@ textarea { flex: 1; border: none; background: none; resize: none; font-size: 14p
   <select class="thread-select" id="threadSelect" onchange="selectThread()">
     <option value="">選択してください</option>
   </select>
+</div>
+
+<!-- 免責バナー（スレッド選択後に表示） -->
+<div class="disclaimer" id="disclaimer" style="display:none">
+  ⚠️ AIの回答は誤りが含まれる場合があります。重要な内容は必ず資料原本またはスタッフへご確認ください。
 </div>
 
 <div class="messages" id="messages">
@@ -150,15 +157,20 @@ function selectThread() {
   const sel = document.getElementById('threadSelect');
   const id = sel.value;
   const name = sel.options[sel.selectedIndex].text;
-  if (!id) return;
+  if (!id) {
+    document.getElementById('disclaimer').style.display = 'none';
+    document.getElementById('chips').style.display = 'none';
+    document.getElementById('sendBtn').disabled = true;
+    return;
+  }
   currentThread = id;
   document.getElementById('headerName').textContent = name;
-  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('disclaimer').style.display = '';
   document.getElementById('chips').style.display = 'flex';
   document.getElementById('sendBtn').disabled = false;
   chatHistory = [];
-  document.getElementById('messages').innerHTML = '<div class="empty-state" id="emptyState" style="display:none"></div>';
-  appendAiMsg(`こんにちは！「${name}」についてのご質問をどうぞ。`, null);
+  document.getElementById('messages').innerHTML = '';
+  appendAiMsg(`こんにちは！「${name}」についてのご質問をどうぞ。\nコースや学年が複数ある場合は、お知らせいただけるとより正確にご案内できます。`, null);
 }
 
 // ----------------------------------------
@@ -195,7 +207,7 @@ function appendAiMsg(text, source) {
           </div>
         </div>
         ${source.hasImages
-          ? `<div class="source-image-wrap" id="img_${sourceId}"><div class="source-loading">📷 ページ画像を読み込み中...</div></div>`
+          ? `<div class="source-image-wrap" id="imgwrap_${sourceId}"><div class="source-loading">📷 ページ画像を読み込み中...</div></div>`
           : ''}
       </div>`;
   }
@@ -212,16 +224,17 @@ function appendAiMsg(text, source) {
 
   // ページ画像を非同期で読み込む
   if (source && source.hasImages) {
-    loadPageImage(source.docId, source.pageNum, `img_src_${Date.now()}`, g.querySelector('[id^="img_"]'));
+    const container = g.querySelector(`[id^="imgwrap_"]`);
+    if (container) loadPageImage(source.docId, source.pageNum, container);
   }
 }
 
-async function loadPageImage(docId, pageNum, id, container) {
+async function loadPageImage(docId, pageNum, container) {
   try {
     const res = await fetch(`${API}/api/page-image/${docId}/${pageNum}`);
     const data = await res.json();
     if (data.url) {
-      container.innerHTML = `<img src="${data.url}" alt="ページ${pageNum}" onclick="openImgModal('${data.url}')">`;
+      container.innerHTML = `<img src="${data.url}" alt="${pageNum}ページ" onclick="openImgModal('${data.url}')">`;
     } else {
       container.innerHTML = '';
     }
