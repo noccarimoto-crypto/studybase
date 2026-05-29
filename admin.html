@@ -11,6 +11,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-ser
 .header { background: #fff; border-bottom: 1px solid #e5e5e7; padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 100; }
 .header h1 { font-size: 17px; font-weight: 600; }
 .header-badge { background: #0071e3; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+.header-spacer { flex: 1; }
+.btn-chat-link { padding: 7px 14px; border-radius: 8px; border: 1px solid #0071e3; color: #0071e3; font-size: 13px; font-weight: 500; background: #fff; cursor: pointer; text-decoration: none; display: flex; align-items: center; gap: 5px; }
+.btn-chat-link:hover { background: #f0f7ff; }
 
 .layout { display: flex; height: calc(100vh - 56px); }
 
@@ -84,6 +87,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-ser
 <div class="header">
   <h1>StudyBase</h1>
   <span class="header-badge">管理画面</span>
+  <div class="header-spacer"></div>
+  <a class="btn-chat-link" href="chat.html">💬 チャット画面へ</a>
 </div>
 
 <div class="layout">
