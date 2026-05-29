@@ -352,6 +352,9 @@ app.post('/api/chat', async (req, res) => {
     });
 
     const rawText = response.content[0].text;
+    console.log('=== AI RAW OUTPUT ===');
+    console.log(rawText.slice(-300));
+    console.log('=== END ===');
 
     // 出典パース（柔軟に対応）: 【出典: 資料名・Xページ】【出典: 資料名（Xページ）】など
     const sourceMatch = rawText.match(/【出典[:：]\s*(.+?)[・・（(]\s*(\d+(?:[〜~]\d+)?\s*ページ?)[）)]?\s*】/);
