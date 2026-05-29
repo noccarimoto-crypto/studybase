@@ -15,9 +15,11 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 // ----------------------------------------
 // ディレクトリ設定
 // ----------------------------------------
-const DATA_FILE   = path.join(__dirname, 'data', 'db.json');
-const DOCS_DIR    = path.join(__dirname, 'docs');
-const IMAGES_DIR  = path.join(__dirname, 'page-images');
+// Persistent Diskのマウントパス（Renderの設定に合わせる）
+const PERSIST_DIR = path.join(__dirname, 'data');
+const DATA_FILE   = path.join(PERSIST_DIR, 'db.json');
+const DOCS_DIR    = path.join(PERSIST_DIR, 'docs');
+const IMAGES_DIR  = path.join(PERSIST_DIR, 'page-images');
 const PUBLIC_DIR  = path.join(__dirname, 'public');
 
 [DOCS_DIR, IMAGES_DIR, PUBLIC_DIR, path.dirname(DATA_FILE)].forEach(d => {
