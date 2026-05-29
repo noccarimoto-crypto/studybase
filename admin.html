@@ -2,436 +2,296 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>管理画面 — StudyBase Admin</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StudyBase 管理画面</title>
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --bg:#0f0f11;--surface:#17171a;--surface2:#1e1e22;--surface3:#26262c;
-  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
-  --text:#f0f0f0;--muted:#888;--subtle:#555;
-  --accent:#c8f04a;--accent2:#9de83a;--accent-dim:rgba(200,240,74,0.1);--accent-dim2:rgba(200,240,74,0.18);
-  --red:#ff5a5a;--red-dim:rgba(255,90,90,0.1);
-  --amber:#f0a830;--amber-dim:rgba(240,168,48,0.1);
-  --blue:#5ab0ff;--blue-dim:rgba(90,176,255,0.1);
-  --radius:10px;--radius-sm:6px;
-}
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;font-size:14px;line-height:1.6}
-.sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto}
-.logo{padding:22px 20px 16px;border-bottom:1px solid var(--border)}
-.logo-mark{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;letter-spacing:-0.02em}
-.logo-icon{width:28px;height:28px;background:var(--accent);border-radius:7px;display:flex;align-items:center;justify-content:center;color:#0f0f11;font-size:14px;font-weight:700}
-.logo-sub{font-size:10px;color:var(--muted);margin-top:2px;letter-spacing:0.05em;text-transform:uppercase;font-family:'DM Mono',monospace}
-.nav{padding:12px 8px;flex:1}
-.nav-label{font-size:10px;color:var(--subtle);letter-spacing:0.1em;text-transform:uppercase;font-family:'DM Mono',monospace;padding:0 12px;margin-bottom:4px}
-.nav-item{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--radius-sm);cursor:pointer;color:var(--muted);font-size:13px;transition:all 0.15s;position:relative}
-.nav-item:hover{background:var(--surface2);color:var(--text)}
-.nav-item.active{background:var(--accent-dim2);color:var(--accent);font-weight:500}
-.nav-item.active::before{content:'';position:absolute;left:0;top:25%;bottom:25%;width:2px;background:var(--accent);border-radius:2px}
-.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
-.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;gap:16px}
-.page-title{font-size:16px;font-weight:600;letter-spacing:-0.02em;flex:1}
-.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:all 0.15s}
-.btn-ghost{background:none;border:1px solid var(--border2);color:var(--muted)}
-.btn-ghost:hover{color:var(--text);background:var(--surface2)}
-.btn-primary{background:var(--accent);color:#0f0f11;font-weight:600}
-.btn-primary:hover{background:var(--accent2)}
-.btn-danger{background:var(--red-dim);color:var(--red);border:1px solid rgba(255,90,90,0.2)}
-.btn-danger:hover{background:rgba(255,90,90,0.18)}
-.btn-sm{padding:4px 10px;font-size:11px}
-.content{flex:1;overflow-y:auto;padding:28px}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
-.stat-label{font-size:11px;color:var(--muted);letter-spacing:0.05em;text-transform:uppercase;font-family:'DM Mono',monospace;margin-bottom:6px}
-.stat-value{font-size:26px;font-weight:600;letter-spacing:-0.03em;line-height:1}
-.stat-value.green{color:var(--accent)}.stat-value.blue{color:var(--blue)}.stat-value.amber{color:var(--amber)}
-.cols{display:grid;grid-template-columns:1fr 340px;gap:20px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-.card-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
-.card-title{font-size:13px;font-weight:600;flex:1}
-.thread-row{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s}
-.thread-row:last-child{border-bottom:none}
-.thread-row:hover{background:var(--surface2)}
-.thread-row.selected{background:var(--accent-dim)}
-.thread-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.thread-dot.active{background:var(--accent)}.thread-dot.archived{background:var(--subtle)}
-.thread-info{flex:1;min-width:0}
-.thread-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.thread-meta{font-size:11px;color:var(--muted);margin-top:1px;font-family:'DM Mono',monospace}
-.badge{font-size:10px;padding:2px 8px;border-radius:20px;font-family:'DM Mono',monospace;font-weight:500;flex-shrink:0}
-.badge-green{background:var(--accent-dim2);color:var(--accent)}
-.badge-gray{background:var(--surface3);color:var(--muted)}
-.badge-amber{background:var(--amber-dim);color:var(--amber)}
-.badge-blue{background:var(--blue-dim);color:var(--blue)}
-.doc-row{display:flex;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid var(--border);transition:background 0.1s}
-.doc-row:last-child{border-bottom:none}
-.doc-row:hover{background:var(--surface2)}
-.doc-icon{width:32px;height:32px;border-radius:var(--radius-sm);background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
-.doc-info{flex:1;min-width:0}
-.doc-name{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.doc-meta{font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:1px}
-.doc-actions{display:flex;gap:4px}
-.icon-btn{width:26px;height:26px;border-radius:var(--radius-sm);background:none;border:1px solid var(--border);color:var(--muted);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.1s}
-.icon-btn:hover{background:var(--surface3);color:var(--text);border-color:var(--border2)}
-.icon-btn.red:hover{background:var(--red-dim);color:var(--red);border-color:rgba(255,90,90,0.2)}
-.upload-zone{margin:14px 18px;border:1.5px dashed var(--border2);border-radius:var(--radius);padding:18px;text-align:center;cursor:pointer;transition:all 0.15s}
-.upload-zone:hover{border-color:var(--accent);background:var(--accent-dim)}
-.upload-zone-text{font-size:12px;color:var(--muted)}
-.upload-zone-sub{font-size:10px;color:var(--subtle);margin-top:2px;font-family:'DM Mono',monospace}
-.detail-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
-.detail-section{padding:16px 18px;border-bottom:1px solid var(--border)}
-.detail-section:last-child{border-bottom:none}
-.detail-label{font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;font-family:'DM Mono',monospace;margin-bottom:8px}
-.detail-value{font-size:13px;font-weight:500}
-.detail-sub{font-size:11px;color:var(--muted);margin-top:2px}
-.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0}
-.toggle-label{font-size:12px;color:var(--muted)}
-.toggle{width:32px;height:18px;background:var(--surface3);border-radius:20px;position:relative;cursor:pointer;transition:background 0.2s;border:none}
-.toggle.on{background:var(--accent)}
-.toggle::after{content:'';position:absolute;width:12px;height:12px;background:white;border-radius:50%;top:3px;left:3px;transition:transform 0.2s}
-.toggle.on::after{transform:translateX(14px)}
-.notif{position:fixed;bottom:24px;right:24px;background:var(--surface3);border:1px solid var(--border2);border-radius:var(--radius);padding:12px 16px;font-size:13px;display:flex;align-items:center;gap:8px;transform:translateY(80px);opacity:0;transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);z-index:100}
-.notif.show{transform:translateY(0);opacity:1}
-.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);z-index:200;align-items:center;justify-content:center}
-.modal-bg.open{display:flex}
-.modal{background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:24px;width:420px}
-.modal h3{font-size:15px;font-weight:600;margin-bottom:6px}
-.modal p{font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.6}
-.input{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:8px 12px;font-size:13px;color:var(--text);font-family:'DM Sans',sans-serif;margin-bottom:10px;outline:none}
-.input:focus{border-color:var(--accent)}
-textarea.input{resize:vertical;min-height:100px;line-height:1.6}
-.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
-.empty{padding:32px;text-align:center;color:var(--subtle);font-size:13px}
-.loading{padding:24px;text-align:center;color:var(--muted);font-size:12px;font-family:'DM Mono',monospace}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f5f5f7; color: #1d1d1f; min-height: 100vh; }
+
+.header { background: #fff; border-bottom: 1px solid #e5e5e7; padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 100; }
+.header h1 { font-size: 17px; font-weight: 600; }
+.header-badge { background: #0071e3; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+
+.layout { display: flex; height: calc(100vh - 56px); }
+
+/* サイドバー */
+.sidebar { width: 240px; background: #fff; border-right: 1px solid #e5e5e7; display: flex; flex-direction: column; flex-shrink: 0; }
+.sidebar-header { padding: 16px; border-bottom: 1px solid #e5e5e7; }
+.sidebar-title { font-size: 12px; font-weight: 600; color: #6e6e73; letter-spacing: 0.05em; margin-bottom: 12px; }
+.btn-new-thread { width: 100%; padding: 8px; border-radius: 8px; border: 1.5px dashed #c7c7cc; background: none; font-size: 13px; color: #0071e3; cursor: pointer; font-weight: 500; }
+.btn-new-thread:hover { background: #f0f7ff; }
+
+.thread-list { flex: 1; overflow-y: auto; padding: 8px; }
+.thread-item { padding: 10px 12px; border-radius: 8px; cursor: pointer; margin-bottom: 2px; display: flex; align-items: center; gap: 8px; }
+.thread-item:hover { background: #f5f5f7; }
+.thread-item.active { background: #e8f0fe; }
+.thread-dot { width: 8px; height: 8px; border-radius: 50%; background: #34c759; flex-shrink: 0; }
+.thread-name { font-size: 13px; font-weight: 500; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thread-del { font-size: 14px; color: #c7c7cc; cursor: pointer; opacity: 0; padding: 2px 4px; }
+.thread-item:hover .thread-del { opacity: 1; }
+.thread-del:hover { color: #ff3b30; }
+
+/* メインエリア */
+.main { flex: 1; overflow-y: auto; padding: 24px; }
+.main-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: #6e6e73; font-size: 14px; }
+
+.section { background: #fff; border-radius: 12px; border: 1px solid #e5e5e7; margin-bottom: 20px; overflow: hidden; }
+.section-header { padding: 16px 20px; border-bottom: 1px solid #e5e5e7; display: flex; align-items: center; justify-content: space-between; }
+.section-title { font-size: 14px; font-weight: 600; }
+
+/* アップロードゾーン */
+.upload-zone { margin: 20px; border: 2px dashed #c7c7cc; border-radius: 12px; padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; }
+.upload-zone:hover, .upload-zone.drag { border-color: #0071e3; background: #f0f7ff; }
+.upload-zone.loading { opacity: 0.6; pointer-events: none; }
+.upload-icon { font-size: 32px; margin-bottom: 8px; }
+.upload-text { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+.upload-sub { font-size: 12px; color: #6e6e73; }
+
+/* 資料リスト */
+.doc-list { padding: 0 20px 20px; }
+.doc-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 8px; border: 1px solid #e5e5e7; margin-top: 10px; }
+.doc-icon { font-size: 24px; flex-shrink: 0; }
+.doc-info { flex: 1; min-width: 0; }
+.doc-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-meta { font-size: 11px; color: #6e6e73; margin-top: 2px; }
+.doc-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.btn-sm { padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; border: 1px solid #c7c7cc; background: #fff; font-weight: 500; }
+.btn-sm:hover { background: #f5f5f7; }
+.btn-sm.danger { color: #ff3b30; border-color: #ff3b30; }
+.btn-sm.danger:hover { background: #fff0ee; }
+.badge { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 500; }
+.badge.active { background: #e8fce8; color: #1a7f37; }
+.badge.archived { background: #f5f5f7; color: #6e6e73; }
+
+.notify { position: fixed; bottom: 24px; right: 24px; background: #1d1d1f; color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+.notify.show { opacity: 1; }
+
+/* モーダル */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+.modal-overlay.show { opacity: 1; pointer-events: all; }
+.modal { background: #fff; border-radius: 16px; padding: 24px; width: 320px; }
+.modal h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+.modal input { width: 100%; border: 1px solid #c7c7cc; border-radius: 8px; padding: 9px 12px; font-size: 14px; margin-bottom: 16px; outline: none; }
+.modal input:focus { border-color: #0071e3; }
+.modal-btns { display: flex; gap: 8px; justify-content: flex-end; }
+.btn-primary { padding: 8px 18px; border-radius: 8px; border: none; background: #0071e3; color: #fff; font-size: 14px; font-weight: 500; cursor: pointer; }
+.btn-primary:hover { background: #0077ed; }
+.btn-cancel { padding: 8px 18px; border-radius: 8px; border: 1px solid #c7c7cc; background: #fff; font-size: 14px; cursor: pointer; }
 </style>
 </head>
 <body>
-<aside class="sidebar">
-  <div class="logo">
-    <div class="logo-mark"><div class="logo-icon">S</div>StudyBase</div>
-    <div class="logo-sub">Admin Console</div>
-  </div>
-  <nav class="nav">
-    <div class="nav-label" style="margin-top:8px">管理</div>
-    <div class="nav-item active">◫ スレッド管理</div>
-    <div class="nav-item" onclick="notify('準備中です')">⊡ 顧客一覧</div>
-    <div class="nav-item" onclick="notify('準備中です')">◈ AI設定</div>
-    <div class="nav-label" style="margin-top:12px">設定</div>
-    <div class="nav-item" onclick="window.open('chat.html','_blank')">↗ チャット画面を開く</div>
-  </nav>
-  <div style="padding:12px;border-top:1px solid var(--border)">
-    <div style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:var(--radius-sm);cursor:pointer" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
-      <div style="width:30px;height:30px;border-radius:50%;background:var(--accent-dim2);border:1.5px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--accent);flex-shrink:0">田</div>
-      <div><div style="font-size:12px;font-weight:500">田中 恵子</div><div style="font-size:10px;color:var(--muted)">管理者</div></div>
-    </div>
-  </div>
-</aside>
 
-<main class="main">
-  <div class="topbar">
-    <div class="page-title">スレッド管理</div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-ghost btn-sm" onclick="loadAll()">⟳ 更新</button>
-      <button class="btn btn-primary" onclick="openModal('thread')">＋ 新規スレッド</button>
+<div class="header">
+  <h1>StudyBase</h1>
+  <span class="header-badge">管理画面</span>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">スレッド</div>
+      <button class="btn-new-thread" onclick="openNewThread()">＋ 新規スレッド</button>
     </div>
+    <div class="thread-list" id="threadList"></div>
   </div>
-  <div class="content">
-    <div class="stats">
-      <div class="stat-card"><div class="stat-label">スレッド数</div><div class="stat-value green" id="statThreads">—</div></div>
-      <div class="stat-card"><div class="stat-label">登録資料数</div><div class="stat-value blue" id="statDocs">—</div></div>
-      <div class="stat-card"><div class="stat-label">有効資料</div><div class="stat-value amber" id="statActive">—</div></div>
-      <div class="stat-card"><div class="stat-label">旧版資料</div><div class="stat-value" id="statOld">—</div></div>
-    </div>
-    <div class="cols">
-      <div>
-        <div class="card" style="margin-bottom:18px">
-          <div class="card-header"><div class="card-title">スレッド一覧</div></div>
-          <div id="threadList"><div class="loading">読み込み中...</div></div>
+
+  <div class="main" id="main">
+    <div class="main-empty" id="mainEmpty">← スレッドを選択してください</div>
+    <div id="mainContent" style="display:none">
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">📄 資料をアップロード</span>
+          <span style="font-size:12px;color:#6e6e73">PDF（テキスト埋め込み）対応</span>
         </div>
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title" id="docPanelTitle">資料一覧</div>
-            <button class="btn btn-ghost btn-sm" onclick="openModal('text')">＋ テキスト登録</button>
-          </div>
-          <div class="upload-zone" id="uploadZone" onclick="handleUploadClick()">
-            <div style="font-size:22px;margin-bottom:6px">↑</div>
-            <div class="upload-zone-text" id="uploadZoneText">クリックしてファイルをアップロード</div>
-            <div class="upload-zone-sub" id="uploadZoneSub">PDF（スキャン含む）· TXT · 最大 50MB</div>
-          </div>
-          <input type="file" id="fileInput" style="display:none" accept=".txt,.text,.pdf,application/pdf" onchange="uploadFile(this)">
-          <div id="docList"><div class="empty">スレッドを選択してください</div></div>
+        <div class="upload-zone" id="uploadZone"
+          onclick="triggerUpload()"
+          ondragover="e=>e.preventDefault()"
+          ondrop="handleDrop(event)">
+          <div class="upload-icon">📂</div>
+          <div class="upload-text" id="uploadText">クリックまたはドラッグ＆ドロップ</div>
+          <div class="upload-sub" id="uploadSub">PDF・TXT・最大50MB</div>
         </div>
-      </div>
-      <div>
-        <div class="detail-card" style="margin-bottom:16px">
-          <div class="detail-section">
-            <div class="detail-label">選択中のスレッド</div>
-            <div class="detail-value" id="detailName">—</div>
-            <div class="detail-sub" id="detailMeta"></div>
-          </div>
-          <div class="detail-section">
-            <div class="detail-label">顧客用チャットURL</div>
-            <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
-              <div id="chatUrl" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
-              <button class="icon-btn" onclick="copyUrl()" title="コピー">⎘</button>
-            </div>
-          </div>
-          <div class="detail-section">
-            <div style="display:flex;gap:8px">
-              <button class="btn btn-ghost btn-sm" style="flex:1" onclick="openChatPreview()">↗ チャットで開く</button>
-              <button class="btn btn-danger btn-sm" style="flex:1" id="archiveBtn" onclick="toggleArchive()">アーカイブ</button>
-            </div>
-          </div>
-        </div>
+        <input type="file" id="fileInput" style="display:none" accept=".pdf,.txt" onchange="uploadFile(this)">
+        <div class="doc-list" id="docList"></div>
       </div>
     </div>
   </div>
-</main>
+</div>
 
-<!-- Modals -->
-<div class="modal-bg" id="modal-thread">
-  <div class="modal" onclick="event.stopPropagation()">
-    <h3>新規スレッドを作成</h3>
-    <p>スレッド名を入力してください。</p>
-    <input class="input" type="text" id="newThreadName" placeholder="例: ○○塾 2027年度 コース案内">
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal('thread')">キャンセル</button>
-      <button class="btn btn-primary" onclick="createThread()">作成する</button>
+<div class="notify" id="notify"></div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3>新規スレッド</h3>
+    <input type="text" id="threadNameInput" placeholder="例：2027年度 ○○塾" onkeydown="if(event.key==='Enter')createThread()">
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal()">キャンセル</button>
+      <button class="btn-primary" onclick="createThread()">作成</button>
     </div>
   </div>
 </div>
-
-<div class="modal-bg" id="modal-text">
-  <div class="modal" onclick="event.stopPropagation()">
-    <h3>テキスト資料を登録</h3>
-    <p>資料名と内容を入力してください。AIはこのテキストをもとに回答します。</p>
-    <input class="input" type="text" id="textDocName" placeholder="資料名（例: 2026年度_学費案内）">
-    <textarea class="input" id="textDocContent" placeholder="資料の内容をここに貼り付けてください...&#10;&#10;例:&#10;■ 月謝&#10;基本コース: 18,000円/月&#10;特進コース: 24,000円/月"></textarea>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal('text')">キャンセル</button>
-      <button class="btn btn-primary" onclick="saveTextDoc()">登録する</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-bg" id="modal-delete">
-  <div class="modal" onclick="event.stopPropagation()">
-    <h3>資料を削除しますか？</h3>
-    <p>この操作は元に戻せません。</p>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal('delete')">キャンセル</button>
-      <button class="btn btn-danger" onclick="doDelete()">削除する</button>
-    </div>
-  </div>
-</div>
-
-<div class="notif" id="notif"><span id="notifText"></span></div>
 
 <script>
 const API = '';
 let currentThread = null;
-let deleteDocId = null;
 
-function notify(msg) {
-  const el = document.getElementById('notif');
-  document.getElementById('notifText').textContent = msg;
+// ----------------------------------------
+// 通知
+// ----------------------------------------
+function notify(msg, duration = 2500) {
+  const el = document.getElementById('notify');
+  el.textContent = msg;
   el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 2800);
+  setTimeout(() => el.classList.remove('show'), duration);
 }
 
-function openModal(name) { document.getElementById('modal-' + name).classList.add('open'); }
-function closeModal(name) { document.getElementById('modal-' + name).classList.remove('open'); }
-
-async function loadAll() {
-  await loadThreads();
-  if (currentThread) await loadDocs(currentThread.id);
-}
-
+// ----------------------------------------
+// スレッド
+// ----------------------------------------
 async function loadThreads() {
-  try {
-    const res = await fetch(API + '/api/threads');
-    const threads = await res.json();
-    renderThreads(threads);
-    document.getElementById('statThreads').textContent = threads.length;
-    const allDocs = await fetch(API + '/api/docs').then(r => r.json());
-    document.getElementById('statDocs').textContent = allDocs.length;
-    document.getElementById('statActive').textContent = allDocs.filter(d => d.status === 'active').length;
-    document.getElementById('statOld').textContent = allDocs.filter(d => d.status === 'old').length;
-  } catch(e) {
-    document.getElementById('threadList').innerHTML = '<div class="empty">サーバーに接続できません。<br>node server.js を実行してください。</div>';
-  }
-}
-
-function renderThreads(threads) {
-  const el = document.getElementById('threadList');
-  if (!threads.length) { el.innerHTML = '<div class="empty">スレッドがありません</div>'; return; }
-  el.innerHTML = threads.map(t => `
-    <div class="thread-row ${currentThread && currentThread.id === t.id ? 'selected' : ''}" onclick="selectThread('${t.id}')">
-      <div class="thread-dot ${t.active ? 'active' : 'archived'}"></div>
-      <div class="thread-info">
-        <div class="thread-name">${t.name}</div>
-        <div class="thread-meta">資料 ${t.docCount}件 (有効 ${t.activeDocs}件)</div>
-      </div>
-      <span class="badge ${t.active ? 'badge-green' : 'badge-gray'}" style="cursor:pointer" title="クリックで切り替え" onclick="event.stopPropagation();quickToggleThread('${t.id}',${t.active})">${t.active ? '公開中' : '非公開'}</span>
-    </div>`).join('');
-}
-
-async function selectThread(id) {
   const res = await fetch(API + '/api/threads');
   const threads = await res.json();
-  currentThread = threads.find(t => t.id === id);
-  if (!currentThread) return;
-  document.getElementById('detailName').textContent = currentThread.name;
-  document.getElementById('detailMeta').textContent = currentThread.active ? '公開中' : '非公開';
-  document.getElementById('chatUrl').textContent = `${window.location.origin}/chat.html?thread=${id}`;
-  document.getElementById('docPanelTitle').textContent = currentThread.name + ' の資料';
-  const btn = document.getElementById('archiveBtn');
-  if (!currentThread.active) { btn.textContent = '公開する'; btn.className = 'btn btn-ghost btn-sm'; }
-  else { btn.textContent = '非公開'; btn.className = 'btn btn-danger btn-sm'; }
-  renderThreads(threads);
-  await loadDocs(id);
+  const list = document.getElementById('threadList');
+  list.innerHTML = threads.map(t => `
+    <div class="thread-item ${currentThread?.id === t.id ? 'active' : ''}" onclick="selectThread('${t.id}','${t.name.replace(/'/g,"\\'")}')">
+      <div class="thread-dot"></div>
+      <div class="thread-name">${t.name}</div>
+      <span class="thread-del" onclick="event.stopPropagation();deleteThread('${t.id}')">✕</span>
+    </div>
+  `).join('');
 }
 
-async function loadDocs(threadId) {
-  const docs = await fetch(API + '/api/docs?threadId=' + threadId).then(r => r.json());
-  renderDocs(docs);
+function openNewThread() {
+  document.getElementById('modalOverlay').classList.add('show');
+  setTimeout(() => document.getElementById('threadNameInput').focus(), 100);
 }
-
-function renderDocs(docs) {
-  const el = document.getElementById('docList');
-  if (!docs.length) { el.innerHTML = '<div class="empty">資料がありません。<br>テキストを登録するか、ファイルをアップロードしてください。</div>'; return; }
-  el.innerHTML = docs.map(d => `
-    <div class="doc-row" id="docrow-${d.id}">
-      <div class="doc-icon">📄</div>
-      <div class="doc-info">
-        <div class="doc-name">${d.name}</div>
-        <div class="doc-meta">${d.size}${d.pageCount ? ' · ' + d.pageCount + 'p' : ''} · ${d.uploadedAt.slice(0,10)} · ${d.status === 'active' ? '有効' : '旧版'}</div>
-      </div>
-      <span class="badge ${d.status === 'active' ? 'badge-green' : 'badge-amber'}" style="margin-right:6px">${d.status === 'active' ? '有効' : '旧版'}</span>
-      <div class="doc-actions">
-        <button class="icon-btn" title="${d.status === 'active' ? '旧版にする' : '有効にする'}" onclick="toggleDocStatus('${d.id}','${d.status}')">${d.status === 'active' ? '↓' : '↑'}</button>
-        <button class="icon-btn red" title="削除" onclick="confirmDelete('${d.id}')">✕</button>
-      </div>
-    </div>`).join('');
-}
-
-async function toggleDocStatus(id, current) {
-  const newStatus = current === 'active' ? 'old' : 'active';
-  await fetch(API + '/api/docs/' + id, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status: newStatus }) });
-  await loadDocs(currentThread.id);
-  notify(newStatus === 'active' ? '資料を有効にしました' : '資料を旧版にしました');
-}
-
-function confirmDelete(id) {
-  deleteDocId = id;
-  openModal('delete');
-}
-
-async function doDelete() {
-  if (!deleteDocId) return;
-  await fetch(API + '/api/docs/' + deleteDocId, { method: 'DELETE' });
-  closeModal('delete');
-  deleteDocId = null;
-  await loadDocs(currentThread.id);
-  notify('資料を削除しました');
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('show');
+  document.getElementById('threadNameInput').value = '';
 }
 
 async function createThread() {
-  const name = document.getElementById('newThreadName').value.trim();
+  const name = document.getElementById('threadNameInput').value.trim();
   if (!name) return;
   await fetch(API + '/api/threads', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
-  document.getElementById('newThreadName').value = '';
-  closeModal('thread');
-  await loadAll();
+  closeModal();
+  await loadThreads();
   notify('スレッドを作成しました');
 }
 
-async function saveTextDoc() {
-  if (!currentThread) { notify('先にスレッドを選択してください'); return; }
-  const name = document.getElementById('textDocName').value.trim();
-  const content = document.getElementById('textDocContent').value.trim();
-  if (!name || !content) return;
-  await fetch(API + '/api/docs/text', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ threadId: currentThread.id, name, content }) });
-  document.getElementById('textDocName').value = '';
-  document.getElementById('textDocContent').value = '';
-  closeModal('text');
-  await loadDocs(currentThread.id);
-  notify('資料を登録しました');
+async function deleteThread(id) {
+  if (!confirm('このスレッドと関連資料をすべて削除しますか？')) return;
+  await fetch(API + '/api/threads/' + id, { method: 'DELETE' });
+  if (currentThread?.id === id) {
+    currentThread = null;
+    document.getElementById('mainEmpty').style.display = '';
+    document.getElementById('mainContent').style.display = 'none';
+  }
+  await loadThreads();
+  notify('削除しました');
 }
 
-function handleUploadClick() {
-  if (!currentThread) {
-    notify('⚠ 先にスレッドを選択してください');
-    // スレッドリストをハイライト
-    document.getElementById('threadList').style.outline = '2px solid var(--accent)';
-    setTimeout(() => document.getElementById('threadList').style.outline = '', 1500);
-    return;
-  }
+function selectThread(id, name) {
+  currentThread = { id, name };
+  document.getElementById('mainEmpty').style.display = 'none';
+  document.getElementById('mainContent').style.display = '';
+  loadThreads();
+  loadDocs();
+}
+
+// ----------------------------------------
+// 資料
+// ----------------------------------------
+async function loadDocs() {
+  if (!currentThread) return;
+  const res = await fetch(API + '/api/docs?threadId=' + currentThread.id);
+  const docs = await res.json();
+  const list = document.getElementById('docList');
+  if (docs.length === 0) { list.innerHTML = '<div style="color:#6e6e73;font-size:13px;padding-top:4px">資料がありません</div>'; return; }
+  list.innerHTML = docs.map(d => `
+    <div class="doc-item">
+      <div class="doc-icon">${d.name.endsWith('.pdf') ? '📕' : '📄'}</div>
+      <div class="doc-info">
+        <div class="doc-name">${d.name}</div>
+        <div class="doc-meta">${d.size}${d.pageCount ? ' · '+d.pageCount+'p' : ''}${d.hasImages ? ' · 🖼画像あり' : ''} · ${d.uploadedAt.slice(0,10)} · <span class="badge ${d.status === 'active' ? 'active' : 'archived'}">${d.status === 'active' ? '有効' : '旧版'}</span></div>
+      </div>
+      <div class="doc-actions">
+        <button class="btn-sm" onclick="toggleStatus('${d.id}','${d.status}')">${d.status === 'active' ? 'アーカイブ' : '有効化'}</button>
+        <button class="btn-sm danger" onclick="deleteDoc('${d.id}')">削除</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function triggerUpload() {
+  if (!currentThread) { notify('⚠ 先にスレッドを選択してください'); return; }
   document.getElementById('fileInput').click();
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  if (!currentThread) { notify('⚠ 先にスレッドを選択してください'); return; }
+  const file = e.dataTransfer.files[0];
+  if (file) doUpload(file);
 }
 
 async function uploadFile(input) {
   const file = input.files[0];
-  if (!file || !currentThread) return;
+  if (!file) return;
+  await doUpload(file);
+  input.value = '';
+}
+
+async function doUpload(file) {
   const isPdf = file.name.toLowerCase().endsWith('.pdf');
+  const zone = document.getElementById('uploadZone');
+  const text = document.getElementById('uploadText');
+  const sub  = document.getElementById('uploadSub');
+
+  zone.classList.add('loading');
+  text.textContent = isPdf ? 'PDFを解析中（ページ画像生成含む）...' : 'アップロード中...';
+  sub.textContent = isPdf ? 'ページ数によっては数十秒かかります' : '';
+
   const form = new FormData();
   form.append('file', file);
   form.append('threadId', currentThread.id);
-
-  document.getElementById('uploadZoneText').textContent = isPdf ? 'PDFを解析中...(数秒〜数十秒かかります)' : 'アップロード中...';
-  document.getElementById('uploadZoneSub').textContent = isPdf ? 'スキャンPDFはOCR処理を行います' : '';
-  document.getElementById('uploadZone').style.pointerEvents = 'none';
-  document.getElementById('uploadZone').style.opacity = '0.6';
 
   try {
     const res = await fetch(API + '/api/docs/upload', { method: 'POST', body: form });
     const data = await res.json();
     if (data.error) {
-      notify('エラー: ' + data.error);
+      notify('エラー: ' + data.error, 4000);
     } else {
-      const ocr = data.ocrUsed ? ' (OCR)' : '';
-      notify(`✓ アップロード完了: ${data.name}${ocr}`);
-      await loadDocs(currentThread.id);
+      const img = data.hasImages ? `・🖼${data.pageCount}ページ分の画像生成済` : '';
+      notify(`アップロード完了: ${data.name}${img}`);
+      await loadDocs();
     }
   } catch(e) {
-    notify('アップロードに失敗しました');
+    notify('エラー: ' + e.message, 4000);
+  } finally {
+    zone.classList.remove('loading');
+    text.textContent = 'クリックまたはドラッグ＆ドロップ';
+    sub.textContent = 'PDF・TXT・最大50MB';
   }
-
-  document.getElementById('uploadZoneText').textContent = 'クリックしてファイルをアップロード';
-  document.getElementById('uploadZoneSub').textContent = 'PDF（スキャン含む）· TXT · 最大 50MB';
-  document.getElementById('uploadZone').style.pointerEvents = '';
-  document.getElementById('uploadZone').style.opacity = '';
-  input.value = '';
 }
 
-async function toggleArchive() {
-  if (!currentThread) return;
-  const newActive = !currentThread.active;
-  await fetch(API + '/api/threads/' + currentThread.id, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ active: newActive }) });
-  notify(newActive ? '公開しました' : '非公開にしました');
-  await loadAll();
+async function toggleStatus(id, status) {
+  const next = status === 'active' ? 'archived' : 'active';
+  await fetch(API + '/api/docs/' + id, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status: next }) });
+  await loadDocs();
 }
 
-function copyUrl() {
-  const url = document.getElementById('chatUrl').textContent;
-  navigator.clipboard.writeText(url).then(() => notify('URLをコピーしました ✓'));
+async function deleteDoc(id) {
+  if (!confirm('この資料を削除しますか？')) return;
+  await fetch(API + '/api/docs/' + id, { method: 'DELETE' });
+  await loadDocs();
+  notify('削除しました');
 }
 
-function openChatPreview() {
-  if (!currentThread) return;
-  window.open('chat.html?thread=' + currentThread.id, '_blank');
-}
-
-async function quickToggleThread(id, currentActive) {
-  await fetch(API + '/api/threads/' + id, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ active: !currentActive }) });
-  notify(!currentActive ? '公開しました' : '非公開にしました');
-  await loadAll();
-}
-
-document.querySelectorAll('.modal-bg').forEach(m => m.addEventListener('click', function(e){ if(e.target===this) this.classList.remove('open'); }));
-
-loadAll();
+// ----------------------------------------
+// 初期化
+// ----------------------------------------
+loadThreads();
 </script>
 </body>
 </html>
