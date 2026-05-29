@@ -110,7 +110,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-ser
         </div>
         <div class="upload-zone" id="uploadZone"
           onclick="triggerUpload()"
-          ondragover="e=>e.preventDefault()"
+          ondragover="event.preventDefault()"
+          ondragenter="event.preventDefault();this.classList.add('drag')"
+          ondragleave="this.classList.remove('drag')"
           ondrop="handleDrop(event)">
           <div class="upload-icon">📂</div>
           <div class="upload-text" id="uploadText">クリックまたはドラッグ＆ドロップ</div>
@@ -235,6 +237,7 @@ function triggerUpload() {
 
 function handleDrop(e) {
   e.preventDefault();
+  document.getElementById('uploadZone').classList.remove('drag');
   if (!currentThread) { notify('⚠ 先にスレッドを選択してください'); return; }
   const file = e.dataTransfer.files[0];
   if (file) doUpload(file);
@@ -287,8 +290,10 @@ async function toggleStatus(id, status) {
 }
 
 async function deleteDoc(id) {
+  if (!id) { notify('⚠ この資料はIDが不明なため削除できません。手動でdb.jsonから削除してください。', 4000); return; }
   if (!confirm('この資料を削除しますか？')) return;
-  await fetch(API + '/api/docs/' + id, { method: 'DELETE' });
+  const res = await fetch(API + '/api/docs/' + id, { method: 'DELETE' });
+  if (!res.ok) { notify('削除に失敗しました', 3000); return; }
   await loadDocs();
   notify('削除しました');
 }
