@@ -357,7 +357,7 @@ app.post('/api/chat', async (req, res) => {
     console.log('=== END ===');
 
     // 出典パース（柔軟に対応）
-    const sourceMatch = rawText.match(/【出典[：::]\s*(.+?)[・･]\s*([\d〜~]+\s*(?:〜[\d]+)?\s*ページ?)\s*】/);
+    const sourceMatch = rawText.match(/【出典[：:：]\s*(.+?)[・･]\s*([\d]+(?:[〜~][\d]+)?\s*ページ?)\s*】/);
     let source = null;
     let pageNum = null;
     let docId = null;
