@@ -333,10 +333,8 @@ app.post('/api/chat', async (req, res) => {
 
 【出典ルール】
 回答の最後に必ず以下の形式で出典を示してください：
-【出典：資料名・Xページ】
-ページ番号は必ず資料内の <!-- PAGE X --> マーカーのXの数字をそのまま使用してください。
-資料に印字されているページ番号や目次のページ番号は絶対に使わないでください。
-<!-- PAGE X --> マーカーのXだけが正しいページ番号です。
+【出典：資料名】
+資料名だけを記載してください。ページ番号は不要です。
 
 【その他のルール】
 1. 登録された資料の内容のみをもとに回答してください。
@@ -374,17 +372,14 @@ app.post('/api/chat', async (req, res) => {
     console.log(rawText.slice(-300));
     console.log('=== END ===');
 
-    // 出典パース（柔軟に対応）
-    const sourceMatch = rawText.match(/【出典[：:](.+?)・(.+?)】/);
+    // 出典パース：資料名のみ取得し、ページはキーワード検索で自動特定
+    const sourceMatch = rawText.match(/【出典[：:](.+?)】/);
     let source = null;
     let pageNum = null;
     let docId = null;
 
     if (sourceMatch) {
       const sourceDocName = sourceMatch[1].trim();
-      const pageStr = sourceMatch[2].replace(/ページ/g, '').trim();
-      // 「8、11」「8〜11」「8~11」など複数形式に対応：最初の数字を取得
-      pageNum = parseInt(pageStr.split(/[〜~、,・\s]/)[0]);
 
       const matchedDoc = activeDocs.find(d =>
         d.name === sourceDocName ||
@@ -393,15 +388,41 @@ app.post('/api/chat', async (req, res) => {
         d.name.replace(/\.pdf$/i, '') === sourceDocName ||
         sourceDocName.includes(d.name.replace(/\.pdf$/i, ''))
       );
+
       if (matchedDoc) {
         docId = matchedDoc.id;
+
+        // AIの回答文から逆引きでページを特定
+        // 回答文中の日付・時間帯・金額などの具体的な文字列でマッチング
+        const answerKeywords = rawText
+          .replace(/【出典.*?】/g, '')
+          .match(/[0-9０-９]{1,2}[月\/][0-9０-９]{1,2}日?|[0-9０-９]{2}:[0-9０-９]{2}|[0-9０-９,，]+円/g) || [];
+
+        let bestPage = 1;
+        let bestScore = -1;
+
+        if (matchedDoc.content && answerKeywords.length > 0) {
+          const pageBlocks = matchedDoc.content.split(/<!-- PAGE (\d+) -->/);
+          for (let i = 1; i < pageBlocks.length; i += 2) {
+            const pNum = parseInt(pageBlocks[i]);
+            const pText = pageBlocks[i + 1] || '';
+            const score = answerKeywords.reduce((s, kw) => s + (pText.includes(kw) ? 1 : 0), 0);
+            if (score > bestScore) {
+              bestScore = score;
+              bestPage = pNum;
+            }
+          }
+        }
+
+        pageNum = bestPage;
         source = {
           docName: matchedDoc.name,
-          pageLabel: sourceMatch[2].trim(),
+          pageLabel: bestPage + 'ページ',
           pageNum,
           docId,
           hasImages: matchedDoc.hasImages
         };
+        console.log(`ページ自動特定: ${matchedDoc.name} → ${bestPage}ページ (answerキーワード: ${answerKeywords.slice(0,5)})`);
       }
     }
 
