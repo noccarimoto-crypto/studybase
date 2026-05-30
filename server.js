@@ -387,7 +387,8 @@ app.post('/api/chat', async (req, res) => {
     if (sourceMatch) {
       const sourceDocName = sourceMatch[1].trim();
       const pageStr = sourceMatch[2].replace(/ページ/g, '').trim();
-      pageNum = parseInt(pageStr.split(/[〜~]/)[0]);
+      // 「8、11」「8〜11」「8~11」など複数形式に対応：最初の数字を取得
+      pageNum = parseInt(pageStr.split(/[〜~、,・\s]/)[0]);
 
       const matchedDoc = activeDocs.find(d =>
         d.name === sourceDocName ||
