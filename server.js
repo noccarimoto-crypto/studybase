@@ -131,7 +131,7 @@ async function extractTextWithPages(filePath, docId) {
   for (let page = 1; page <= pageCount; page++) {
     try {
       const pageText = execSync(
-        `pdftotext -f ${page} -l ${page} -layout "${filePath}" -`,
+        `pdftotext -f ${page} -l ${page} "${filePath}" -`,
         { timeout: 30000, encoding: 'utf8' }
       );
       const cleaned = pageText.replace(/\s+/g, ' ').trim();
