@@ -81,38 +81,28 @@ async function generatePageImages(filePath, docId) {
     });
 
     // 生成されたファイル一覧を取得
-    let files = fs.readdirSync(outDir)
+    const rawFiles = fs.readdirSync(outDir)
       .filter(f => f.endsWith('.png'))
       .sort();
 
-    // 見開き（横長）ページを左右に分割する
+    // ページ番号を1から振り直し（見開き分割しない→物理ページ番号を保持）
     const sharp = require('sharp');
-    const splitFiles = [];
-    for (const file of files) {
-      const imgPath = path.join(outDir, file);
-      const meta = await sharp(imgPath).metadata();
-      // 横幅が縦の1.4倍以上なら見開きと判断して左右分割
-      if (meta.width > meta.height * 1.4) {
-        const half = Math.floor(meta.width / 2);
-        const baseName = file.replace('.png', '');
-        const leftFile  = baseName + '_L.png';
-        const rightFile = baseName + '_R.png';
-        await sharp(imgPath)
-          .extract({ left: 0, top: 0, width: half, height: meta.height })
-          .toFile(path.join(outDir, leftFile));
-        await sharp(imgPath)
-          .extract({ left: half, top: 0, width: meta.width - half, height: meta.height })
-          .toFile(path.join(outDir, rightFile));
-        fs.unlinkSync(imgPath);
-        splitFiles.push(leftFile, rightFile);
-      } else {
-        splitFiles.push(file);
+    let pageCount = 0;
+    for (const file of rawFiles) {
+      pageCount++;
+      const oldPath = path.join(outDir, file);
+      // ページ番号を3桁ゼロ埋めで統一: p001.png, p002.png ...
+      const newName = 'p' + String(pageCount).padStart(3, '0') + '.png';
+      const newPath = path.join(outDir, newName);
+      if (file !== newName) {
+        // sharpで読み直して保存（品質を保ちつつリネーム）
+        await sharp(oldPath).toFile(newPath);
+        fs.unlinkSync(oldPath);
       }
     }
-    files = splitFiles.sort();
 
-    console.log(`ページ画像生成完了: ${files.length}枚 (docId: ${docId})`);
-    return files.length;
+    console.log(`ページ画像生成完了: ${pageCount}枚 (docId: ${docId})`);
+    return pageCount;
   } catch (e) {
     console.error('ページ画像生成エラー:', e.message);
     return 0;
@@ -422,21 +412,11 @@ app.get('/api/page-image/:docId/:pageNum', (req, res) => {
   const files = fs.readdirSync(imgDir).filter(f => f.endsWith('.png')).sort();
   const num = parseInt(pageNum);
 
-  // page-8_L.png / page-8_R.png / page-8.png のいずれかを探す
-  // まず左ページ(L)を優先、なければ通常ページ、なければインデックスで取得
-  const padded2 = String(num).padStart(2, '0');
-  const padded3 = String(num).padStart(3, '0');
-  const candidates = [
-    `page-${num}_L.png`, `page-${padded2}_L.png`, `page-${padded3}_L.png`,
-    `page-${num}.png`,   `page-${padded2}.png`,   `page-${padded3}.png`,
-  ];
+  // p001.png 形式で直接探す（物理ページ番号と1:1対応）
+  const target = 'p' + String(num).padStart(3, '0') + '.png';
+  let found = files.includes(target) ? target : null;
 
-  let found = null;
-  for (const c of candidates) {
-    if (files.includes(c)) { found = c; break; }
-  }
-
-  // 見つからなければインデックスで取得
+  // 見つからなければインデックスフォールバック
   if (!found) {
     const targetIdx = num - 1;
     if (targetIdx >= 0 && targetIdx < files.length) {
