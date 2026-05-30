@@ -222,19 +222,25 @@ function appendAiMsg(text, source) {
   m.appendChild(g);
   scrollBottom();
 
-  // ページ画像を非同期で読み込む
+  // ページ画像を非同期で読み込む（複数ページ対応）
   if (source && source.hasImages) {
     const container = g.querySelector(`[id^="imgwrap_"]`);
-    if (container) loadPageImage(source.docId, source.pageNum, container);
+    if (container) loadPageImages(source.docId, source.topPages || [source.pageNum], container);
   }
 }
 
-async function loadPageImage(docId, pageNum, container) {
+async function loadPageImages(docId, pages, container) {
   try {
-    const res = await fetch(`${API}/api/page-image/${docId}/${pageNum}`);
-    const data = await res.json();
-    if (data.url) {
-      container.innerHTML = `<img src="${data.url}" alt="${pageNum}ページ" onclick="openImgModal('${data.url}')">`;
+    const imgs = [];
+    for (const pageNum of pages) {
+      const res = await fetch(`${API}/api/page-image/${docId}/${pageNum}`);
+      const data = await res.json();
+      if (data.url) imgs.push({ url: data.url, pageNum });
+    }
+    if (imgs.length > 0) {
+      container.innerHTML = imgs.map(({ url, pageNum }) =>
+        `<img src="${url}" alt="${pageNum}ページ" onclick="openImgModal('${url}')" style="margin-bottom:8px">`
+      ).join('');
     } else {
       container.innerHTML = '';
     }
