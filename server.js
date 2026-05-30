@@ -317,9 +317,8 @@ app.post('/api/chat', async (req, res) => {
 
 【出典ルール】
 回答の最後に必ず以下の形式で出典を示してください：
-【出典：資料名・Xページ】
-ページ番号は資料内の <!-- PAGE X --> マーカーのXをそのまま使用してください。
-<!-- PAGE X --> は物理的なページ番号です。資料に印字された番号は無視してください。
+【出典：資料名】
+資料名のみを記載してください。ページ番号は不要です。
 
 【その他のルール】
 1. 登録された資料の内容のみをもとに回答してください。
@@ -357,17 +356,14 @@ app.post('/api/chat', async (req, res) => {
     console.log(rawText.slice(-300));
     console.log('=== END ===');
 
-    // 出典パース（資料名＋ページ番号）
-    const sourceMatch = rawText.match(/【出典[：:](.+?)・(.+?)】/);
+    // 出典パース：資料名を取得し、ページはTF-IDFで自動特定
+    const sourceMatch = rawText.match(/【出典[：:](.+?)】/);
     let source = null;
     let pageNum = null;
     let docId = null;
 
     if (sourceMatch) {
       const sourceDocName = sourceMatch[1].trim();
-      const pageStr = sourceMatch[2].replace(/ページ/g, '').trim();
-      pageNum = parseInt(pageStr.split(/[〜~、,・\s]/)[0]);
-
       const matchedDoc = activeDocs.find(d =>
         d.name === sourceDocName ||
         d.name.includes(sourceDocName) ||
@@ -375,16 +371,60 @@ app.post('/api/chat', async (req, res) => {
         d.name.replace(/\.pdf$/i, '') === sourceDocName ||
         sourceDocName.includes(d.name.replace(/\.pdf$/i, ''))
       );
-      if (matchedDoc) {
+
+      if (matchedDoc && matchedDoc.content) {
         docId = matchedDoc.id;
+
+        // AI回答文をトークン化（2文字以上の連続する日本語・英数字）
+        const answerText = rawText.replace(/【出典.*?】/g, '').replace(/[\s\*#・]/g, ' ');
+        const tokenize = (text) => {
+          const tokens = [];
+          // 日本語フレーズ：2〜6文字の連続部分文字列
+          const cleaned = text.replace(/[\s\(\)（）【】「」]/g, '');
+          for (let len = 2; len <= 6; len++) {
+            for (let i = 0; i <= cleaned.length - len; i++) {
+              tokens.push(cleaned.slice(i, i + len));
+            }
+          }
+          return tokens;
+        };
+
+        const answerTokens = tokenize(answerText);
+
+        // ページブロックごとにスコア計算
+        const pageBlocks = matchedDoc.content.split(/<!-- PAGE (\d+) -->/);
+        const pageScores = [];
+
+        for (let i = 1; i < pageBlocks.length; i += 2) {
+          const pNum = parseInt(pageBlocks[i]);
+          const pText = pageBlocks[i + 1] || '';
+          if (pText.trim().length < 50) continue; // 空に近いページは除外
+
+          // answerTokensのうちpTextに含まれるものをカウント
+          let score = 0;
+          const uniqueTokens = [...new Set(answerTokens)];
+          for (const token of uniqueTokens) {
+            if (pText.includes(token)) score++;
+          }
+          // スコアをページのテキスト長で正規化（長いページが有利になりすぎないよう）
+          const normalizedScore = score / Math.log(pText.length + 10);
+          pageScores.push({ pNum, score: normalizedScore, rawScore: score });
+        }
+
+        pageScores.sort((a, b) => b.score - a.score);
+        const bestPages = pageScores.slice(0, 3);
+        pageNum = bestPages[0]?.pNum || 1;
+
+        console.log(`TF-IDF ページ特定: ${matchedDoc.name} → ${pageNum}ページ (上位: ${bestPages.map(p => p.pNum + ':' + p.rawScore.toFixed(0)).join(', ')})`);
+
         source = {
           docName: matchedDoc.name,
-          pageLabel: sourceMatch[2].trim(),
           pageNum,
           docId,
-          hasImages: matchedDoc.hasImages
+          hasImages: matchedDoc.hasImages,
+          // 上位ページを複数保持（将来の複数ページ表示用）
+          topPages: bestPages.map(p => p.pNum)
         };
-        console.log(`出典: ${matchedDoc.name} → ${pageNum}ページ`);
       }
     }
 
