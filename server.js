@@ -110,56 +110,33 @@ async function generatePageImages(filePath, docId) {
 }
 
 // ----------------------------------------
-// PDFテキスト抽出（ページマーカー付き）
+// PDFテキスト抽出（pdftotext使用・ページ番号完全対応）
 // ----------------------------------------
 async function extractTextWithPages(filePath, docId) {
+  // まずページ数を取得
   const dataBuffer = fs.readFileSync(filePath);
-  const parsed = await pdfParse(dataBuffer, {
-    pagerender: function(pageData) {
-      return pageData.getTextContent().then(function(textContent) {
-        return textContent.items.map(item => item.str).join(' ');
-      });
-    }
-  });
-
-  const rawText = parsed.text;
+  const parsed = await pdfParse(dataBuffer);
   const pageCount = parsed.numpages;
-  const pages = rawText.split(/\f/);
 
-  // pagemap.jsonがあれば見開き分割を考慮したページ番号に変換
-  // 物理ページN → 見開き分割後の先頭ブックページ番号を取得
-  let physicalToBook = null;
-  if (docId) {
-    const pagemapPath = path.join(IMAGES_DIR, docId, 'pagemap.json');
-    if (fs.existsSync(pagemapPath)) {
-      const pageMap = JSON.parse(fs.readFileSync(pagemapPath, 'utf8'));
-      const totalBookPages = Object.keys(pageMap).length;
-      const pagesPerPhysical = Math.round(totalBookPages / pageCount);
-      physicalToBook = (physicalPage) => (physicalPage - 1) * pagesPerPhysical + 1;
+  let markedText = '';
+
+  for (let page = 1; page <= pageCount; page++) {
+    try {
+      // pdftotext で1ページずつ抽出（物理ページ番号と完全対応）
+      const pageText = execSync(
+        `pdftotext -f ${page} -l ${page} -layout "${filePath}" -`,
+        { timeout: 30000, encoding: 'utf8' }
+      );
+      const cleaned = pageText.replace(/\s+/g, ' ').trim();
+      if (cleaned) {
+        markedText += `\n<!-- PAGE ${page} -->\n${cleaned}\n`;
+      }
+    } catch (e) {
+      console.error(`ページ${page}のテキスト抽出エラー:`, e.message);
     }
   }
 
-  let markedText = '';
-  pages.forEach((pageText, i) => {
-    const physicalPage = i + 1;
-    if (physicalPage > pageCount) return;
-    let cleaned = pageText.replace(/\s+/g, ' ').trim();
-    if (!cleaned) return;
-
-    // 印字されたページ番号・目次参照を除去
-    // 例: "P.8" "P.4-5" "P.9-10" → 除去
-    cleaned = cleaned.replace(/P\.\d{1,3}(-\d{1,3})?/gi, '');
-    // 行末・行頭の孤立した1〜2桁数字（ページ番号として使われる）を除去
-    cleaned = cleaned.replace(/(^|\s)\d{1,2}($|(?=\s))/g, ' ').replace(/\s+/g, ' ').trim();
-
-    if (physicalToBook) {
-      const bookPage = physicalToBook(physicalPage);
-      markedText += `\n<!-- PAGE ${bookPage} -->\n${cleaned}\n`;
-    } else {
-      markedText += `\n<!-- PAGE ${physicalPage} -->\n${cleaned}\n`;
-    }
-  });
-
+  console.log(`テキスト抽出完了: ${pageCount}ページ`);
   return { text: markedText.trim(), pageCount };
 }
 
@@ -333,8 +310,9 @@ app.post('/api/chat', async (req, res) => {
 
 【出典ルール】
 回答の最後に必ず以下の形式で出典を示してください：
-【出典：資料名】
-資料名だけを記載してください。ページ番号は不要です。
+【出典：資料名・Xページ】
+ページ番号は資料内の <!-- PAGE X --> マーカーのXをそのまま使用してください。
+<!-- PAGE X --> は物理的なページ番号です。資料に印字された番号は無視してください。
 
 【その他のルール】
 1. 登録された資料の内容のみをもとに回答してください。
@@ -372,14 +350,16 @@ app.post('/api/chat', async (req, res) => {
     console.log(rawText.slice(-300));
     console.log('=== END ===');
 
-    // 出典パース：資料名のみ取得し、ページはキーワード検索で自動特定
-    const sourceMatch = rawText.match(/【出典[：:](.+?)】/);
+    // 出典パース（資料名＋ページ番号）
+    const sourceMatch = rawText.match(/【出典[：:](.+?)・(.+?)】/);
     let source = null;
     let pageNum = null;
     let docId = null;
 
     if (sourceMatch) {
       const sourceDocName = sourceMatch[1].trim();
+      const pageStr = sourceMatch[2].replace(/ページ/g, '').trim();
+      pageNum = parseInt(pageStr.split(/[〜~、,・\s]/)[0]);
 
       const matchedDoc = activeDocs.find(d =>
         d.name === sourceDocName ||
@@ -388,55 +368,16 @@ app.post('/api/chat', async (req, res) => {
         d.name.replace(/\.pdf$/i, '') === sourceDocName ||
         sourceDocName.includes(d.name.replace(/\.pdf$/i, ''))
       );
-
       if (matchedDoc) {
         docId = matchedDoc.id;
-
-        // AIの回答文から逆引きでページを特定
-        // 回答文中の日付・時間帯・金額などの具体的な文字列でマッチング
-        const answerKeywords = rawText
-          .replace(/【出典.*?】/g, '')
-          .match(/[0-9]{1,2}[月\/][0-9]{1,2}[日\(（]?|[0-9]{2}:[0-9]{2}|[0-9,，]+円/g) || [];
-
-        let bestPage = 1;
-        let bestScore = -1;
-
-        if (matchedDoc.content && answerKeywords.length > 0) {
-          const pageBlocks = matchedDoc.content.split(/<!-- PAGE (\d+) -->/);
-          for (let i = 1; i < pageBlocks.length; i += 2) {
-            const pNum = parseInt(pageBlocks[i]);
-            const pText = pageBlocks[i + 1] || '';
-            const matchCount = answerKeywords.reduce((s, kw) => s + (pText.includes(kw) ? 1 : 0), 0);
-            // テキスト量で正規化（短いページ＝表紙・目次は不利にする）
-            // 最低200文字以上のページのみ対象、スコアが同じなら後のページを優先
-            if (pText.length < 100) continue; // テキストが極端に少ないページは除外
-            const score = matchCount * 1000 + pText.length; // テキスト量をタイブレーカーに
-            if (matchCount > 0 && score > bestScore) {
-              bestScore = score;
-              bestPage = pNum;
-            }
-          }
-          // 1件もマッチしなかった場合はテキスト量が最大のページ（本文らしいページ）を選択
-          if (bestScore === -1) {
-            const pageBlocks2 = matchedDoc.content.split(/<!-- PAGE (\d+) -->/);
-            let maxLen = 0;
-            for (let i = 1; i < pageBlocks2.length; i += 2) {
-              const pNum = parseInt(pageBlocks2[i]);
-              const pText = pageBlocks2[i + 1] || '';
-              if (pText.length > maxLen) { maxLen = pText.length; bestPage = pNum; }
-            }
-          }
-        }
-
-        pageNum = bestPage;
         source = {
           docName: matchedDoc.name,
-          pageLabel: bestPage + 'ページ',
+          pageLabel: sourceMatch[2].trim(),
           pageNum,
           docId,
           hasImages: matchedDoc.hasImages
         };
-        console.log(`ページ自動特定: ${matchedDoc.name} → ${bestPage}ページ (answerキーワード: ${answerKeywords.slice(0,5)})`);
+        console.log(`出典: ${matchedDoc.name} → ${pageNum}ページ`);
       }
     }
 
