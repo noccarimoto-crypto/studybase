@@ -76,6 +76,7 @@ async function generatePageImages(filePath, docId) {
 
   try {
     // pdftoppm でPDFを各ページPNGに変換（150dpi）
+    // 1枚=1ページのPDFを前提とする
     execSync(`pdftoppm -r 150 -png "${filePath}" "${path.join(outDir, 'page')}"`, {
       timeout: 120000
     });
@@ -85,49 +86,23 @@ async function generatePageImages(filePath, docId) {
       .sort();
 
     const sharp = require('sharp');
+    const pageMap = {};
 
-    // 見開き分割しながら「ブックページ番号→ファイル名」のマップを作成
-    // pdfページ1枚が見開きなら左=奇数ページ、右=偶数ページとして展開
-    const pageMap = {}; // ブックページ番号 → ファイル名
-    let bookPage = 1;
-
-    for (const file of rawFiles) {
-      const imgPath = path.join(outDir, file);
-      const meta = await sharp(imgPath).metadata();
-
-      if (meta.width > meta.height * 1.4) {
-        // 見開き：左右に分割
-        const half = Math.floor(meta.width / 2);
-        const leftFile  = 'p' + String(bookPage).padStart(3, '0') + '.png';
-        const rightFile = 'p' + String(bookPage + 1).padStart(3, '0') + '.png';
-
-        await sharp(imgPath)
-          .extract({ left: 0, top: 0, width: half, height: meta.height })
-          .toFile(path.join(outDir, leftFile));
-        await sharp(imgPath)
-          .extract({ left: half, top: 0, width: meta.width - half, height: meta.height })
-          .toFile(path.join(outDir, rightFile));
-        fs.unlinkSync(imgPath);
-
-        pageMap[bookPage]     = leftFile;
-        pageMap[bookPage + 1] = rightFile;
-        bookPage += 2;
-      } else {
-        // 単ページ
-        const newName = 'p' + String(bookPage).padStart(3, '0') + '.png';
-        await sharp(imgPath).toFile(path.join(outDir, newName));
-        fs.unlinkSync(imgPath);
-        pageMap[bookPage] = newName;
-        bookPage++;
-      }
+    for (let i = 0; i < rawFiles.length; i++) {
+      const pageNum = i + 1;
+      const oldPath = path.join(outDir, rawFiles[i]);
+      const newName = 'p' + String(pageNum).padStart(3, '0') + '.png';
+      const newPath = path.join(outDir, newName);
+      await sharp(oldPath).toFile(newPath);
+      if (rawFiles[i] !== newName) fs.unlinkSync(oldPath);
+      pageMap[pageNum] = newName;
     }
 
     // ページマップをJSONで保存
     fs.writeFileSync(path.join(outDir, 'pagemap.json'), JSON.stringify(pageMap, null, 2));
 
-    const totalPages = bookPage - 1;
-    console.log(`ページ画像生成完了: ${totalPages}ページ (docId: ${docId})`);
-    return totalPages;
+    console.log(`ページ画像生成完了: ${rawFiles.length}ページ (docId: ${docId})`);
+    return rawFiles.length;
   } catch (e) {
     console.error('ページ画像生成エラー:', e.message);
     return 0;
@@ -137,10 +112,9 @@ async function generatePageImages(filePath, docId) {
 // ----------------------------------------
 // PDFテキスト抽出（ページマーカー付き）
 // ----------------------------------------
-async function extractTextWithPages(filePath) {
+async function extractTextWithPages(filePath, docId) {
   const dataBuffer = fs.readFileSync(filePath);
   const parsed = await pdfParse(dataBuffer, {
-    // ページごとにコールバックでテキストを取得
     pagerender: function(pageData) {
       return pageData.getTextContent().then(function(textContent) {
         return textContent.items.map(item => item.str).join(' ');
@@ -148,21 +122,36 @@ async function extractTextWithPages(filePath) {
     }
   });
 
-  // pdfParseのtextはページ区切りが\fになる場合がある
-  // ページを分割してマーカーを付与
   const rawText = parsed.text;
   const pageCount = parsed.numpages;
-
-  // \fで分割（PDFのページ区切り文字）
   const pages = rawText.split(/\f/);
+
+  // pagemap.jsonがあれば見開き分割を考慮したページ番号に変換
+  // 物理ページN → 見開き分割後の先頭ブックページ番号を取得
+  let physicalToBook = null;
+  if (docId) {
+    const pagemapPath = path.join(IMAGES_DIR, docId, 'pagemap.json');
+    if (fs.existsSync(pagemapPath)) {
+      const pageMap = JSON.parse(fs.readFileSync(pagemapPath, 'utf8'));
+      const totalBookPages = Object.keys(pageMap).length;
+      const pagesPerPhysical = Math.round(totalBookPages / pageCount);
+      physicalToBook = (physicalPage) => (physicalPage - 1) * pagesPerPhysical + 1;
+    }
+  }
 
   let markedText = '';
   pages.forEach((pageText, i) => {
-    const pageNum = i + 1;
-    if (pageNum > pageCount) return;
+    const physicalPage = i + 1;
+    if (physicalPage > pageCount) return;
     const cleaned = pageText.replace(/\s+/g, ' ').trim();
-    if (cleaned) {
-      markedText += `\n<!-- PAGE ${pageNum} -->\n${cleaned}\n`;
+    if (!cleaned) return;
+
+    if (physicalToBook) {
+      // 見開き分割後のブックページ番号でマーカーを付与
+      const bookPage = physicalToBook(physicalPage);
+      markedText += `\n<!-- PAGE ${bookPage} -->\n${cleaned}\n`;
+    } else {
+      markedText += `\n<!-- PAGE ${physicalPage} -->\n${cleaned}\n`;
     }
   });
 
@@ -233,10 +222,21 @@ app.post('/api/docs/upload', upload.single('file'), async (req, res) => {
   let pageCount = null;
   let hasImages = false;
 
+  // DocIDを先に確定
+  const docId = 'doc_' + Date.now();
+
+  // PDFなら画像生成を先に行う（pagemap.jsonをテキスト抽出で使うため）
+  if (ext === '.pdf') {
+    console.log(`ページ画像生成開始: ${originalName}`);
+    const imgCount = await generatePageImages(filePath, docId);
+    hasImages = imgCount > 0;
+    console.log(`ページ画像: ${imgCount}枚`);
+  }
+
   try {
     if (ext === '.pdf') {
       console.log(`PDF解析開始: ${originalName}`);
-      const result = await extractTextWithPages(filePath);
+      const result = await extractTextWithPages(filePath, docId);
       content = result.text;
       pageCount = result.pageCount;
       console.log(`テキスト抽出完了: ${pageCount}ページ, ${content.length}文字`);
@@ -247,17 +247,6 @@ app.post('/api/docs/upload', upload.single('file'), async (req, res) => {
   } catch (e) {
     console.error('テキスト抽出エラー:', e.message);
     return res.status(500).json({ error: 'ファイルの解析に失敗しました: ' + e.message });
-  }
-
-  // DocIDを先に確定
-  const docId = 'doc_' + Date.now();
-
-  // PDFならページ画像を生成
-  if (ext === '.pdf') {
-    console.log(`ページ画像生成開始: ${originalName}`);
-    const imgCount = await generatePageImages(filePath, docId);
-    hasImages = imgCount > 0;
-    console.log(`ページ画像: ${imgCount}枚`);
   }
 
   const db = loadDB();
