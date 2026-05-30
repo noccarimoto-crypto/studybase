@@ -80,29 +80,54 @@ async function generatePageImages(filePath, docId) {
       timeout: 120000
     });
 
-    // 生成されたファイル一覧を取得
     const rawFiles = fs.readdirSync(outDir)
       .filter(f => f.endsWith('.png'))
       .sort();
 
-    // ページ番号を1から振り直し（見開き分割しない→物理ページ番号を保持）
     const sharp = require('sharp');
-    let pageCount = 0;
+
+    // 見開き分割しながら「ブックページ番号→ファイル名」のマップを作成
+    // pdfページ1枚が見開きなら左=奇数ページ、右=偶数ページとして展開
+    const pageMap = {}; // ブックページ番号 → ファイル名
+    let bookPage = 1;
+
     for (const file of rawFiles) {
-      pageCount++;
-      const oldPath = path.join(outDir, file);
-      // ページ番号を3桁ゼロ埋めで統一: p001.png, p002.png ...
-      const newName = 'p' + String(pageCount).padStart(3, '0') + '.png';
-      const newPath = path.join(outDir, newName);
-      if (file !== newName) {
-        // sharpで読み直して保存（品質を保ちつつリネーム）
-        await sharp(oldPath).toFile(newPath);
-        fs.unlinkSync(oldPath);
+      const imgPath = path.join(outDir, file);
+      const meta = await sharp(imgPath).metadata();
+
+      if (meta.width > meta.height * 1.4) {
+        // 見開き：左右に分割
+        const half = Math.floor(meta.width / 2);
+        const leftFile  = 'p' + String(bookPage).padStart(3, '0') + '.png';
+        const rightFile = 'p' + String(bookPage + 1).padStart(3, '0') + '.png';
+
+        await sharp(imgPath)
+          .extract({ left: 0, top: 0, width: half, height: meta.height })
+          .toFile(path.join(outDir, leftFile));
+        await sharp(imgPath)
+          .extract({ left: half, top: 0, width: meta.width - half, height: meta.height })
+          .toFile(path.join(outDir, rightFile));
+        fs.unlinkSync(imgPath);
+
+        pageMap[bookPage]     = leftFile;
+        pageMap[bookPage + 1] = rightFile;
+        bookPage += 2;
+      } else {
+        // 単ページ
+        const newName = 'p' + String(bookPage).padStart(3, '0') + '.png';
+        await sharp(imgPath).toFile(path.join(outDir, newName));
+        fs.unlinkSync(imgPath);
+        pageMap[bookPage] = newName;
+        bookPage++;
       }
     }
 
-    console.log(`ページ画像生成完了: ${pageCount}枚 (docId: ${docId})`);
-    return pageCount;
+    // ページマップをJSONで保存
+    fs.writeFileSync(path.join(outDir, 'pagemap.json'), JSON.stringify(pageMap, null, 2));
+
+    const totalPages = bookPage - 1;
+    console.log(`ページ画像生成完了: ${totalPages}ページ (docId: ${docId})`);
+    return totalPages;
   } catch (e) {
     console.error('ページ画像生成エラー:', e.message);
     return 0;
@@ -409,19 +434,28 @@ app.get('/api/page-image/:docId/:pageNum', (req, res) => {
     return res.status(404).json({ error: 'images not found' });
   }
 
-  const files = fs.readdirSync(imgDir).filter(f => f.endsWith('.png')).sort();
   const num = parseInt(pageNum);
+  let found = null;
 
-  // p001.png 形式で直接探す（物理ページ番号と1:1対応）
-  const target = 'p' + String(num).padStart(3, '0') + '.png';
-  let found = files.includes(target) ? target : null;
+  // pagemap.json があればそれを使って正確にページ番号対応
+  const pagemapPath = path.join(imgDir, 'pagemap.json');
+  if (fs.existsSync(pagemapPath)) {
+    const pageMap = JSON.parse(fs.readFileSync(pagemapPath, 'utf8'));
+    found = pageMap[num] || null;
 
-  // 見つからなければインデックスフォールバック
-  if (!found) {
-    const targetIdx = num - 1;
-    if (targetIdx >= 0 && targetIdx < files.length) {
-      found = files[targetIdx];
+    // 見つからない場合：最も近いページにフォールバック
+    if (!found) {
+      const keys = Object.keys(pageMap).map(Number).sort((a, b) => a - b);
+      const closest = keys.reduce((prev, cur) =>
+        Math.abs(cur - num) < Math.abs(prev - num) ? cur : prev
+      );
+      found = pageMap[closest] || null;
     }
+  } else {
+    // pagemap.jsonがない旧データ：インデックスで取得
+    const files = fs.readdirSync(imgDir).filter(f => f.endsWith('.png')).sort();
+    const target = 'p' + String(num).padStart(3, '0') + '.png';
+    found = files.includes(target) ? target : (files[num - 1] || null);
   }
 
   if (!found) {
