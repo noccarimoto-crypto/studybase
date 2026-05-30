@@ -143,11 +143,16 @@ async function extractTextWithPages(filePath, docId) {
   pages.forEach((pageText, i) => {
     const physicalPage = i + 1;
     if (physicalPage > pageCount) return;
-    const cleaned = pageText.replace(/\s+/g, ' ').trim();
+    let cleaned = pageText.replace(/\s+/g, ' ').trim();
     if (!cleaned) return;
 
+    // 印字されたページ番号・目次参照を除去
+    // 例: "P.8" "P.4-5" "P.9-10" → 除去
+    cleaned = cleaned.replace(/P\.\d{1,3}(-\d{1,3})?/gi, '');
+    // 行末・行頭の孤立した1〜2桁数字（ページ番号として使われる）を除去
+    cleaned = cleaned.replace(/(^|\s)\d{1,2}($|(?=\s))/g, ' ').replace(/\s+/g, ' ').trim();
+
     if (physicalToBook) {
-      // 見開き分割後のブックページ番号でマーカーを付与
       const bookPage = physicalToBook(physicalPage);
       markedText += `\n<!-- PAGE ${bookPage} -->\n${cleaned}\n`;
     } else {
