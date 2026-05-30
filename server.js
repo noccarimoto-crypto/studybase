@@ -375,21 +375,7 @@ app.post('/api/chat', async (req, res) => {
       if (matchedDoc && matchedDoc.content) {
         docId = matchedDoc.id;
 
-        // AI回答文をトークン化（2文字以上の連続する日本語・英数字）
-        const answerText = rawText.replace(/【出典.*?】/g, '').replace(/[\s\*#・]/g, ' ');
-        const tokenize = (text) => {
-          const tokens = [];
-          // 日本語フレーズ：2〜6文字の連続部分文字列
-          const cleaned = text.replace(/[\s\(\)（）【】「」]/g, '');
-          for (let len = 2; len <= 6; len++) {
-            for (let i = 0; i <= cleaned.length - len; i++) {
-              tokens.push(cleaned.slice(i, i + len));
-            }
-          }
-          return tokens;
-        };
-
-        const answerTokens = tokenize(answerText);
+        const answerText = rawText.replace(/【出典.*?】/g, '').replace(/[\s\*#]/g, ' ');
 
         // ページブロックごとにスコア計算
         const pageBlocks = matchedDoc.content.split(/<!-- PAGE (\d+) -->/);
@@ -398,31 +384,43 @@ app.post('/api/chat', async (req, res) => {
         for (let i = 1; i < pageBlocks.length; i += 2) {
           const pNum = parseInt(pageBlocks[i]);
           const pText = pageBlocks[i + 1] || '';
-          if (pText.trim().length < 50) continue; // 空に近いページは除外
+          if (pText.trim().length < 50) continue;
 
-          // answerTokensのうちpTextに含まれるものをカウント
-          let score = 0;
-          const uniqueTokens = [...new Set(answerTokens)];
-          for (const token of uniqueTokens) {
-            if (pText.includes(token)) score++;
+          // スコア1: 回答文中のフレーズ（3〜8文字）がページに含まれる数
+          let phraseScore = 0;
+          const cleaned = answerText.replace(/[\(\)（）【】「」、。！？]/g, '');
+          for (let len = 3; len <= 8; len++) {
+            for (let j = 0; j <= cleaned.length - len; j++) {
+              const phrase = cleaned.slice(j, j + len);
+              if (pText.includes(phrase)) phraseScore++;
+            }
           }
-          // スコアをページのテキスト長で正規化（長いページが有利になりすぎないよう）
-          const normalizedScore = score / Math.log(pText.length + 10);
-          pageScores.push({ pNum, score: normalizedScore, rawScore: score });
+
+          // スコア2: 質問文中のキーワードがページに含まれる数（学年・校舎名など）
+          // 質問に含まれる固有名詞を優先
+          const queryKeywords = message.replace(/[、。？！\s]/g, ' ').split(' ')
+            .filter(w => w.length >= 2 && !/^[0-9]+$/.test(w));
+          let queryScore = 0;
+          for (const kw of queryKeywords) {
+            if (pText.includes(kw)) queryScore += 10; // 質問キーワードは高いウェイト
+          }
+
+          // 正規化: テキスト長の対数で割る
+          const totalScore = (phraseScore + queryScore) / Math.log(pText.length + 10);
+          pageScores.push({ pNum, totalScore, phraseScore, queryScore });
         }
 
-        pageScores.sort((a, b) => b.score - a.score);
+        pageScores.sort((a, b) => b.totalScore - a.totalScore);
         const bestPages = pageScores.slice(0, 3);
         pageNum = bestPages[0]?.pNum || 1;
 
-        console.log(`TF-IDF ページ特定: ${matchedDoc.name} → ${pageNum}ページ (上位: ${bestPages.map(p => p.pNum + ':' + p.rawScore.toFixed(0)).join(', ')})`);
+        console.log(`ページ特定: ${matchedDoc.name} → ${pageNum}ページ (上位: ${bestPages.map(p => p.pNum + '(p:' + p.phraseScore + ',q:' + p.queryScore + ')').join(', ')})`);
 
         source = {
           docName: matchedDoc.name,
           pageNum,
           docId,
           hasImages: matchedDoc.hasImages,
-          // 上位ページを複数保持（将来の複数ページ表示用）
           topPages: bestPages.map(p => p.pNum)
         };
       }
