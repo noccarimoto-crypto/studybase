@@ -113,16 +113,23 @@ async function generatePageImages(filePath, docId) {
 // PDFテキスト抽出（pdftotext使用・ページ番号完全対応）
 // ----------------------------------------
 async function extractTextWithPages(filePath, docId) {
-  // まずページ数を取得
-  const dataBuffer = fs.readFileSync(filePath);
-  const parsed = await pdfParse(dataBuffer);
-  const pageCount = parsed.numpages;
+  // pdfinfo でページ数を取得（pdf-parseより正確）
+  let pageCount = 0;
+  try {
+    const pdfInfo = execSync(`pdfinfo "${filePath}"`, { encoding: 'utf8' });
+    const match = pdfInfo.match(/Pages:\s*(\d+)/);
+    if (match) pageCount = parseInt(match[1]);
+  } catch(e) {
+    // フォールバック：pdf-parse
+    const dataBuffer = fs.readFileSync(filePath);
+    const parsed = await pdfParse(dataBuffer);
+    pageCount = parsed.numpages;
+  }
 
   let markedText = '';
 
   for (let page = 1; page <= pageCount; page++) {
     try {
-      // pdftotext で1ページずつ抽出（物理ページ番号と完全対応）
       const pageText = execSync(
         `pdftotext -f ${page} -l ${page} -layout "${filePath}" -`,
         { timeout: 30000, encoding: 'utf8' }
@@ -136,7 +143,7 @@ async function extractTextWithPages(filePath, docId) {
     }
   }
 
-  console.log(`テキスト抽出完了: ${pageCount}ページ`);
+  console.log(`テキスト抽出完了: ${pageCount}ページ, ${markedText.length}文字`);
   return { text: markedText.trim(), pageCount };
 }
 
