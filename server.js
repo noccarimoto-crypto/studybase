@@ -406,10 +406,24 @@ app.post('/api/chat', async (req, res) => {
           for (let i = 1; i < pageBlocks.length; i += 2) {
             const pNum = parseInt(pageBlocks[i]);
             const pText = pageBlocks[i + 1] || '';
-            const score = answerKeywords.reduce((s, kw) => s + (pText.includes(kw) ? 1 : 0), 0);
-            if (score > bestScore) {
+            const matchCount = answerKeywords.reduce((s, kw) => s + (pText.includes(kw) ? 1 : 0), 0);
+            // テキスト量で正規化（短いページ＝表紙・目次は不利にする）
+            // 最低200文字以上のページのみ対象、スコアが同じなら後のページを優先
+            if (pText.length < 100) continue; // テキストが極端に少ないページは除外
+            const score = matchCount * 1000 + pText.length; // テキスト量をタイブレーカーに
+            if (matchCount > 0 && score > bestScore) {
               bestScore = score;
               bestPage = pNum;
+            }
+          }
+          // 1件もマッチしなかった場合はテキスト量が最大のページ（本文らしいページ）を選択
+          if (bestScore === -1) {
+            const pageBlocks2 = matchedDoc.content.split(/<!-- PAGE (\d+) -->/);
+            let maxLen = 0;
+            for (let i = 1; i < pageBlocks2.length; i += 2) {
+              const pNum = parseInt(pageBlocks2[i]);
+              const pText = pageBlocks2[i + 1] || '';
+              if (pText.length > maxLen) { maxLen = pText.length; bestPage = pNum; }
             }
           }
         }
