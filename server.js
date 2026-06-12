@@ -64,13 +64,15 @@ function parseDocName(name) {
   const gradeMatch = base.match(/(小[1-6]|中[1-3])/);
   const grade = gradeMatch ? gradeMatch[1] : null;
   // コース名：学年以降を末尾から除去
-  // 例: 「高校受験コース小4αクラス」→「高校受験コース」
+  // 例: 「高校受験コース小4」→「高校受験コース」
+  // αクラス単体ファイル例: 「中学受験コース_αクラス」→course=「中学受験コース」, grade=null, isAlpha=true
   let course = base;
   if (grade) {
     const gradeIdx = base.indexOf(grade);
     course = base.slice(0, gradeIdx).trim();
   } else {
-    course = base.replace(/αクラス|αクラス/g, '').trim();
+    // 学年なし（αクラス単体ファイルなど）
+    course = base.replace(/_?αクラス|_?αクラス/g, '').trim();
   }
   return { course, grade, isAlpha };
 }
@@ -281,6 +283,7 @@ app.get('/api/options', (req, res) => {
     const grades = [];
     const seen = new Set();
 
+    // 通常ファイル（学年あり）
     for (const doc of docs) {
       const { grade, isAlpha } = parseDocName(doc.name);
       if (!grade) continue;
@@ -288,6 +291,27 @@ app.get('/api/options', (req, res) => {
       if (!seen.has(label)) {
         seen.add(label);
         grades.push(label);
+      }
+    }
+
+    // αクラス単体ファイル（grade=null, isAlpha=true）があれば
+    // 小3α〜小6αを追加（通常ファイルの学年に合わせてα版を生成）
+    const hasAlphaFile = docs.some(d => {
+      const p = parseDocName(d.name);
+      return p.isAlpha && !p.grade;
+    });
+    if (hasAlphaFile) {
+      // 通常ファイルの学年からα版を生成
+      const normalGrades = docs
+        .map(d => parseDocName(d.name))
+        .filter(p => p.grade && !p.isAlpha)
+        .map(p => p.grade);
+      for (const g of normalGrades) {
+        const alphaLabel = `${g}α`;
+        if (!seen.has(alphaLabel)) {
+          seen.add(alphaLabel);
+          grades.push(alphaLabel);
+        }
       }
     }
 
@@ -316,14 +340,26 @@ app.get('/api/find-doc', (req, res) => {
   const isAlpha = grade && grade.includes('α');
   const gradeBase = grade ? grade.replace('α', '').trim() : '';
 
-  const matched = activeDocs.find(d => {
-    const parsed = parseDocName(d.name);
-    if (parsed.course !== course) return false;
-    if (parsed.grade !== gradeBase) return false;
-    if (isAlpha && !parsed.isAlpha) return false;
-    if (!isAlpha && parsed.isAlpha) return false;
-    return true;
-  });
+  let matched = null;
+  if (isAlpha) {
+    // α選択時：まず「コース_αクラス.pdf」のような単体αファイルを探す
+    matched = activeDocs.find(d => {
+      const parsed = parseDocName(d.name);
+      return parsed.course === course && parsed.isAlpha && !parsed.grade;
+    });
+    // なければ学年付きαファイルを探す
+    if (!matched) {
+      matched = activeDocs.find(d => {
+        const parsed = parseDocName(d.name);
+        return parsed.course === course && parsed.grade === gradeBase && parsed.isAlpha;
+      });
+    }
+  } else {
+    matched = activeDocs.find(d => {
+      const parsed = parseDocName(d.name);
+      return parsed.course === course && parsed.grade === gradeBase && !parsed.isAlpha;
+    });
+  }
 
   if (!matched) return res.status(404).json({ error: 'doc not found' });
   res.json({ docId: matched.id, docName: matched.name, hasImages: matched.hasImages, pageCount: matched.pageCount });
@@ -353,6 +389,60 @@ app.get('/api/all-page-images/:docId', (req, res) => {
   }
 
   res.json({ urls });
+});
+
+// ----------------------------------------
+// API: フリーテキストからコース・学年を判定
+// ----------------------------------------
+app.post('/api/identify', async (req, res) => {
+  const { threadId, message } = req.body;
+  if (!message || !threadId) return res.status(400).json({ error: 'required' });
+  if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'API key not set' });
+
+  const db = loadDB();
+  const activeDocs = db.docs.filter(d => d.threadId === threadId && d.status === 'active');
+  const courses = [...new Set(activeDocs.map(d => parseDocName(d.name).course).filter(Boolean))];
+
+  // 全コース・学年リストをAIに渡してユーザーの入力から判定させる
+  const gradesByCourse = {};
+  for (const course of courses) {
+    const docs = activeDocs.filter(d => parseDocName(d.name).course === course);
+    const grades = new Set();
+    docs.forEach(d => {
+      const p = parseDocName(d.name);
+      if (p.grade) grades.add(p.grade);
+    });
+    gradesByCourse[course] = [...grades];
+  }
+
+  const prompt = `以下のコース・学年の一覧があります：
+${JSON.stringify(gradesByCourse, null, 2)}
+
+ユーザーの入力：「${message}」
+
+この入力から、コース名と学年を特定してください。
+以下のJSON形式のみで回答してください（説明不要）：
+{"course": "コース名またはnull", "grade": "学年またはnull"}
+
+特定できない場合はnullを返してください。学年はαなしのみ返してください（αの判定はシステムが行います）。`;
+
+  try {
+    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 100,
+      messages: [{ role: 'user', content: prompt }]
+    });
+    const text = response.content[0].text.trim();
+    const json = JSON.parse(text.replace(/```json|```/g, '').trim());
+    res.json({
+      course: json.course || null,
+      grade: json.grade || null
+    });
+  } catch(e) {
+    console.error('identify error:', e.message);
+    res.json({ course: null, grade: null });
+  }
 });
 
 // ----------------------------------------
