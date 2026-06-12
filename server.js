@@ -63,16 +63,14 @@ function parseDocName(name) {
   // 学年を抽出（小1〜小6、中1〜中3など）
   const gradeMatch = base.match(/(小[1-6]|中[1-3])/);
   const grade = gradeMatch ? gradeMatch[1] : null;
-  // コース名：学年以降を末尾から除去
-  // 例: 「高校受験コース小4」→「高校受験コース」
-  // αクラス単体ファイル例: 「中学受験コース_αクラス」→course=「中学受験コース」, grade=null, isAlpha=true
+  // コース名：学年以降を末尾から除去、アンダースコアも除去
   let course = base;
   if (grade) {
     const gradeIdx = base.indexOf(grade);
-    course = base.slice(0, gradeIdx).trim();
+    course = base.slice(0, gradeIdx).replace(/_+$/, '').trim();
   } else {
-    // 学年なし（αクラス単体ファイルなど）
-    course = base.replace(/_?αクラス|_?αクラス/g, '').trim();
+    // 学年なし（αクラス単体ファイルなど）: _αクラス部分を除去
+    course = base.replace(/_?αクラス/g, '').replace(/_?αクラス/g, '').replace(/_+$/, '').trim();
   }
   return { course, grade, isAlpha };
 }
