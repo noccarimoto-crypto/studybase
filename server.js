@@ -12,10 +12,6 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-// ----------------------------------------
-// ディレクトリ設定
-// ----------------------------------------
-// Persistent Diskのマウントパス（Renderの設定に合わせる）
 const PERSIST_DIR = path.join(__dirname, 'data');
 const DATA_FILE   = path.join(PERSIST_DIR, 'db.json');
 const DOCS_DIR    = path.join(PERSIST_DIR, 'docs');
@@ -26,9 +22,6 @@ const PUBLIC_DIR  = path.join(__dirname, 'public');
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
 });
 
-// ----------------------------------------
-// DB（JSON）
-// ----------------------------------------
 function loadDB() {
   if (!fs.existsSync(DATA_FILE)) return { threads: [], docs: [] };
   return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
@@ -37,19 +30,12 @@ function saveDB(db) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
 }
 
-// ----------------------------------------
-// Middleware
-// ----------------------------------------
 app.use(cors());
 app.use(express.json());
-// ページ画像を静的配信
 app.use('/page-images', express.static(IMAGES_DIR));
 app.use(express.static(PUBLIC_DIR));
 app.use(express.static(__dirname));
 
-// ----------------------------------------
-// multer
-// ----------------------------------------
 const storage = multer.diskStorage({
   destination: DOCS_DIR,
   filename: (req, file, cb) => {
@@ -68,15 +54,31 @@ const upload = multer({
 });
 
 // ----------------------------------------
-// PDFからページ画像を生成する関数
+// ファイル名からコース・学年を抽出
+// ファイル名例: 中学受験コース小4.pdf / 中学受験コース小4αクラス.pdf
+// ----------------------------------------
+function parseDocName(name) {
+  const base = name.replace(/\.pdf$/i, '');
+  const isAlpha = base.includes('α') || base.includes('α');
+  // 学年を抽出（小1〜小6、中1〜中3など）
+  const gradeMatch = base.match(/(小[1-6]|中[1-3])/);
+  const grade = gradeMatch ? gradeMatch[1] : null;
+  // コース名（学年とαクラス部分を除いた残り）
+  const course = base
+    .replace(/(小[1-6]|中[1-3])(αクラス|αクラス)?/, '')
+    .replace(/αクラス|αクラス/, '')
+    .trim();
+  return { course, grade, isAlpha };
+}
+
+// ----------------------------------------
+// PDFページ画像生成
 // ----------------------------------------
 async function generatePageImages(filePath, docId) {
   const outDir = path.join(IMAGES_DIR, docId);
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
   try {
-    // pdftoppm でPDFを各ページPNGに変換（150dpi）
-    // 1枚=1ページのPDFを前提とする
     execSync(`pdftoppm -r 150 -png "${filePath}" "${path.join(outDir, 'page')}"`, {
       timeout: 120000
     });
@@ -98,9 +100,7 @@ async function generatePageImages(filePath, docId) {
       pageMap[pageNum] = newName;
     }
 
-    // ページマップをJSONで保存
     fs.writeFileSync(path.join(outDir, 'pagemap.json'), JSON.stringify(pageMap, null, 2));
-
     console.log(`ページ画像生成完了: ${rawFiles.length}ページ (docId: ${docId})`);
     return rawFiles.length;
   } catch (e) {
@@ -110,24 +110,21 @@ async function generatePageImages(filePath, docId) {
 }
 
 // ----------------------------------------
-// PDFテキスト抽出（pdftotext使用・ページ番号完全対応）
+// PDFテキスト抽出
 // ----------------------------------------
-async function extractTextWithPages(filePath, docId) {
-  // pdfinfo でページ数を取得（pdf-parseより正確）
+async function extractTextWithPages(filePath) {
   let pageCount = 0;
   try {
     const pdfInfo = execSync(`pdfinfo "${filePath}"`, { encoding: 'utf8' });
     const match = pdfInfo.match(/Pages:\s*(\d+)/);
     if (match) pageCount = parseInt(match[1]);
   } catch(e) {
-    // フォールバック：pdf-parse
     const dataBuffer = fs.readFileSync(filePath);
     const parsed = await pdfParse(dataBuffer);
     pageCount = parsed.numpages;
   }
 
   let markedText = '';
-
   for (let page = 1; page <= pageCount; page++) {
     try {
       const pageText = execSync(
@@ -148,18 +145,15 @@ async function extractTextWithPages(filePath, docId) {
 }
 
 // ----------------------------------------
-// API: スレッド一覧
+// スレッドAPI
 // ----------------------------------------
 app.get('/api/threads', (req, res) => {
-  const db = loadDB();
-  res.json(db.threads);
+  res.json(loadDB().threads);
 });
 
 app.post('/api/threads', (req, res) => {
-  const { name } = req.body;
-  if (!name) return res.status(400).json({ error: 'name required' });
   const db = loadDB();
-  const thread = { id: 'th_' + Date.now(), name, createdAt: new Date().toISOString() };
+  const thread = { id: 'thread_' + Date.now(), name: req.body.name, createdAt: new Date().toISOString() };
   db.threads.push(thread);
   saveDB(db);
   res.json(thread);
@@ -167,103 +161,81 @@ app.post('/api/threads', (req, res) => {
 
 app.delete('/api/threads/:id', (req, res) => {
   const db = loadDB();
-  db.threads = db.threads.filter(t => t.id !== req.params.id);
-  // 関連する資料も削除
-  const docsToDelete = db.docs.filter(d => d.threadId === req.params.id);
-  docsToDelete.forEach(doc => {
+  db.docs.filter(d => d.threadId === req.params.id).forEach(doc => {
     const fp = path.join(DOCS_DIR, doc.filename);
     if (fs.existsSync(fp)) fs.unlinkSync(fp);
-    // ページ画像も削除
     const imgDir = path.join(IMAGES_DIR, doc.id);
     if (fs.existsSync(imgDir)) fs.rmSync(imgDir, { recursive: true });
   });
   db.docs = db.docs.filter(d => d.threadId !== req.params.id);
+  db.threads = db.threads.filter(t => t.id !== req.params.id);
   saveDB(db);
   res.json({ ok: true });
 });
 
 // ----------------------------------------
-// API: 資料一覧
+// 資料API
 // ----------------------------------------
 app.get('/api/docs', (req, res) => {
-  const { threadId } = req.query;
   const db = loadDB();
-  const docs = threadId ? db.docs.filter(d => d.threadId === threadId) : db.docs;
-  res.json(docs.map(d => ({
-    id: d.id, threadId: d.threadId, name: d.name,
-    size: d.size, pageCount: d.pageCount, status: d.status,
-    uploadedAt: d.uploadedAt, hasImages: d.hasImages
-  })));
+  const docs = db.docs.filter(d => d.threadId === req.query.threadId);
+  res.json(docs.map(d => ({ ...d, content: undefined })));
 });
 
-// ----------------------------------------
-// API: 資料アップロード（PDF画像化対応）
-// ----------------------------------------
 app.post('/api/docs/upload', upload.single('file'), async (req, res) => {
-  const { threadId } = req.body;
-  if (!req.file || !threadId) return res.status(400).json({ error: 'file and threadId required' });
-
-  const filePath = req.file.path;
-  const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
-  const ext = path.extname(originalName).toLowerCase();
-
-  let content = '';
-  let pageCount = null;
-  let hasImages = false;
-
-  // DocIDを先に確定
-  const docId = 'doc_' + Date.now();
-
-  // PDFなら画像生成を先に行う（pagemap.jsonをテキスト抽出で使うため）
-  if (ext === '.pdf') {
-    console.log(`ページ画像生成開始: ${originalName}`);
-    const imgCount = await generatePageImages(filePath, docId);
-    hasImages = imgCount > 0;
-    console.log(`ページ画像: ${imgCount}枚`);
-  }
-
   try {
-    if (ext === '.pdf') {
-      console.log(`PDF解析開始: ${originalName}`);
-      const result = await extractTextWithPages(filePath, docId);
+    const { threadId } = req.body;
+    if (!threadId) return res.status(400).json({ error: 'threadId required' });
+
+    const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+    const ext  = path.extname(originalName).toLowerCase();
+    const isPdf = ext === '.pdf';
+    const docId = 'doc_' + Date.now();
+    const filePath = req.file.path;
+    const stat = fs.statSync(filePath);
+    const sizeKB = Math.round(stat.size / 1024) + ' KB';
+
+    let content = '';
+    let pageCount = 0;
+    let hasImages = false;
+
+    console.log(`PDF解析開始: ${originalName}`);
+
+    if (isPdf) {
+      const result = await extractTextWithPages(filePath);
       content = result.text;
       pageCount = result.pageCount;
-      console.log(`テキスト抽出完了: ${pageCount}ページ, ${content.length}文字`);
+      const imgCount = await generatePageImages(filePath, docId);
+      hasImages = imgCount > 0;
+      console.log(`ページ画像: ${imgCount}枚`);
     } else {
       content = fs.readFileSync(filePath, 'utf8');
-      pageCount = null;
     }
+
+    const doc = {
+      id: docId,
+      threadId,
+      name: originalName,
+      filename: path.basename(filePath),
+      size: sizeKB,
+      pageCount: pageCount || undefined,
+      hasImages,
+      status: 'active',
+      uploadedAt: new Date().toISOString(),
+      content
+    };
+
+    const db = loadDB();
+    db.docs.push(doc);
+    saveDB(db);
+
+    res.json({ ...doc, content: undefined });
   } catch (e) {
-    console.error('テキスト抽出エラー:', e.message);
-    return res.status(500).json({ error: 'ファイルの解析に失敗しました: ' + e.message });
+    console.error('Upload error:', e);
+    res.status(500).json({ error: e.message });
   }
-
-  const db = loadDB();
-  const doc = {
-    id: docId,
-    threadId,
-    name: originalName,
-    filename: req.file.filename,
-    size: (req.file.size / 1024).toFixed(0) + ' KB',
-    pageCount,
-    hasImages,
-    status: 'active',
-    content,
-    uploadedAt: new Date().toISOString()
-  };
-  db.docs.push(doc);
-  saveDB(db);
-
-  res.json({
-    id: doc.id, name: doc.name, size: doc.size,
-    pageCount: doc.pageCount, hasImages: doc.hasImages,
-    status: doc.status, uploadedAt: doc.uploadedAt
-  });
 });
 
-// ----------------------------------------
-// API: 資料ステータス変更（有効/旧版）
-// ----------------------------------------
 app.patch('/api/docs/:id', (req, res) => {
   const db = loadDB();
   const doc = db.docs.find(d => d.id === req.params.id);
@@ -273,16 +245,12 @@ app.patch('/api/docs/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// ----------------------------------------
-// API: 資料削除
-// ----------------------------------------
 app.delete('/api/docs/:id', (req, res) => {
   const db = loadDB();
   const doc = db.docs.find(d => d.id === req.params.id);
   if (doc) {
     const fp = path.join(DOCS_DIR, doc.filename);
     if (fs.existsSync(fp)) fs.unlinkSync(fp);
-    // ページ画像ディレクトリも削除
     const imgDir = path.join(IMAGES_DIR, doc.id);
     if (fs.existsSync(imgDir)) fs.rmSync(imgDir, { recursive: true });
   }
@@ -292,157 +260,112 @@ app.delete('/api/docs/:id', (req, res) => {
 });
 
 // ----------------------------------------
-// API: チャット（RAG＋ページ番号付き出典）
+// API: コース・学年一覧（ファイル名から生成）
+// ----------------------------------------
+app.get('/api/options', (req, res) => {
+  const { threadId } = req.query;
+  const db = loadDB();
+  const activeDocs = db.docs.filter(d => d.threadId === threadId && d.status === 'active');
+
+  // コース一覧
+  const courses = [...new Set(activeDocs.map(d => parseDocName(d.name).course).filter(Boolean))];
+
+  // コースごとの学年一覧（αあり・なし両方）
+  const gradesByCourse = {};
+  for (const course of courses) {
+    const docs = activeDocs.filter(d => parseDocName(d.name).course === course);
+    const grades = [];
+    const seen = new Set();
+
+    for (const doc of docs) {
+      const { grade, isAlpha } = parseDocName(doc.name);
+      if (!grade) continue;
+      const label = isAlpha ? `${grade}α` : grade;
+      if (!seen.has(label)) {
+        seen.add(label);
+        grades.push(label);
+      }
+    }
+
+    // 学年順にソート
+    grades.sort((a, b) => {
+      const numA = parseInt(a.replace(/[^0-9]/g, ''));
+      const numB = parseInt(b.replace(/[^0-9]/g, ''));
+      if (numA !== numB) return numA - numB;
+      return a.includes('α') ? 1 : -1; // 同学年ならノーマル先
+    });
+
+    gradesByCourse[course] = grades;
+  }
+
+  res.json({ courses, gradesByCourse });
+});
+
+// ----------------------------------------
+// API: 資料検索（コース+学年でdocIdを返す）
+// ----------------------------------------
+app.get('/api/find-doc', (req, res) => {
+  const { threadId, course, grade } = req.query;
+  const db = loadDB();
+  const activeDocs = db.docs.filter(d => d.threadId === threadId && d.status === 'active');
+
+  const isAlpha = grade && grade.includes('α');
+  const gradeBase = grade ? grade.replace('α', '').trim() : '';
+
+  const matched = activeDocs.find(d => {
+    const parsed = parseDocName(d.name);
+    if (parsed.course !== course) return false;
+    if (parsed.grade !== gradeBase) return false;
+    if (isAlpha && !parsed.isAlpha) return false;
+    if (!isAlpha && parsed.isAlpha) return false;
+    return true;
+  });
+
+  if (!matched) return res.status(404).json({ error: 'doc not found' });
+  res.json({ docId: matched.id, docName: matched.name, hasImages: matched.hasImages, pageCount: matched.pageCount });
+});
+
+// ----------------------------------------
+// API: 全ページ画像URL取得
+// ----------------------------------------
+app.get('/api/all-page-images/:docId', (req, res) => {
+  const { docId } = req.params;
+  const imgDir = path.join(IMAGES_DIR, docId);
+
+  if (!fs.existsSync(imgDir)) {
+    return res.status(404).json({ error: 'images not found' });
+  }
+
+  const pagemapPath = path.join(imgDir, 'pagemap.json');
+  let urls = [];
+
+  if (fs.existsSync(pagemapPath)) {
+    const pageMap = JSON.parse(fs.readFileSync(pagemapPath, 'utf8'));
+    const pages = Object.keys(pageMap).map(Number).sort((a, b) => a - b);
+    urls = pages.map(p => `/page-images/${docId}/${pageMap[p]}`);
+  } else {
+    const files = fs.readdirSync(imgDir).filter(f => f.endsWith('.png')).sort();
+    urls = files.map(f => `/page-images/${docId}/${f}`);
+  }
+
+  res.json({ urls });
+});
+
+// ----------------------------------------
+// API: チャット（新方式：AIは使わずファイル名で直接検索）
 // ----------------------------------------
 app.post('/api/chat', async (req, res) => {
   const { threadId, message, history } = req.body;
   if (!message || !threadId) return res.status(400).json({ error: 'threadId and message required' });
-  if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEYが設定されていません。' });
 
-  const db = loadDB();
-  const thread = db.threads.find(t => t.id === threadId);
-  if (!thread) return res.status(404).json({ error: 'thread not found' });
-
-  const activeDocs = db.docs.filter(d => d.threadId === threadId && d.status === 'active' && d.content);
-
-  let systemPrompt = `あなたは「${thread.name}」専用のサポートAIです。
-以下のルールを必ず守って、顧客からの質問に日本語で丁寧に答えてください。
-
-【絶対ルール：情報が揃うまで回答しない】
-回答に必要な「校舎・学年・コース」が揃っていない場合は、絶対に内容を答えず、不足している情報を一つずつ質問してください。
-例：「小5の日程は？」→ コースが不明 → 「どのコースについてのご質問でしょうか？」と聞く
-例：「私立中学受験コースの日程は？」→ 学年が不明 → 「何年生についてのご質問でしょうか？」と聞く
-例：「料金は？」→ 校舎・学年・コースが不明 → 「まず校舎、学年、コースを教えていただけますか？」と聞く
-すべての情報が揃ってから初めて回答してください。このルールは絶対に破ってはいけません。
-
-【出典ルール】
-回答の最後に必ず以下の形式で出典を示してください：
-【出典：資料名】
-資料名のみを記載してください。ページ番号は不要です。
-
-【その他のルール】
-1. 登録された資料の内容のみをもとに回答してください。
-2. Markdownの記号（#、**、- など）は使わず、自然な会話文で書いてください。
-3. 資料に記載のない内容は「資料には記載がないため、直接お問い合わせください」と答えてください。
-
-`;
-
-  if (activeDocs.length > 0) {
-    systemPrompt += '【登録資料】\n';
-    activeDocs.forEach(doc => {
-      systemPrompt += `\n=== ${doc.name} ===\n${doc.content}\n`;
-    });
-  } else {
-    systemPrompt += '現在、有効な資料が登録されていません。一般的な案内のみ対応してください。';
-  }
-
-  const messages = (history || []).map(m => ({
-    role: m.role === 'user' ? 'user' : 'assistant',
-    content: m.text
-  }));
-  messages.push({ role: 'user', content: message });
-
-  try {
-    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages
-    });
-
-    const rawText = response.content[0].text;
-    console.log('=== AI RAW OUTPUT ===');
-    console.log(rawText.slice(-300));
-    console.log('=== END ===');
-
-    // 出典パース：資料名を取得し、ページはTF-IDFで自動特定
-    const sourceMatch = rawText.match(/【出典[：:](.+?)】/);
-    let source = null;
-    let pageNum = null;
-    let docId = null;
-
-    if (sourceMatch) {
-      const sourceDocName = sourceMatch[1].trim();
-      const matchedDoc = activeDocs.find(d =>
-        d.name === sourceDocName ||
-        d.name.includes(sourceDocName) ||
-        sourceDocName.includes(d.name) ||
-        d.name.replace(/\.pdf$/i, '') === sourceDocName ||
-        sourceDocName.includes(d.name.replace(/\.pdf$/i, ''))
-      );
-
-      if (matchedDoc && matchedDoc.content) {
-        docId = matchedDoc.id;
-
-        const answerText = rawText.replace(/【出典.*?】/g, '').replace(/[\s\*#]/g, ' ');
-
-        // ページブロックごとにスコア計算
-        const pageBlocks = matchedDoc.content.split(/<!-- PAGE (\d+) -->/);
-        const pageScores = [];
-
-        for (let i = 1; i < pageBlocks.length; i += 2) {
-          const pNum = parseInt(pageBlocks[i]);
-          const pText = pageBlocks[i + 1] || '';
-          if (pText.trim().length < 50) continue;
-
-          // スコア1: 回答文中のフレーズ（3〜8文字）がページに含まれる数
-          let phraseScore = 0;
-          const cleaned = answerText.replace(/[\(\)（）【】「」、。！？]/g, '');
-          for (let len = 3; len <= 8; len++) {
-            for (let j = 0; j <= cleaned.length - len; j++) {
-              const phrase = cleaned.slice(j, j + len);
-              if (pText.includes(phrase)) phraseScore++;
-            }
-          }
-
-          // スコア2: 質問文中のキーワードがページに含まれる数（学年・校舎名など）
-          // 質問に含まれる固有名詞を優先
-          const queryKeywords = message.replace(/[、。？！\s]/g, ' ').split(' ')
-            .filter(w => w.length >= 2 && !/^[0-9]+$/.test(w));
-          let queryScore = 0;
-          for (const kw of queryKeywords) {
-            if (pText.includes(kw)) queryScore += 10; // 質問キーワードは高いウェイト
-          }
-
-          // 正規化: テキスト長の対数で割る
-          const totalScore = (phraseScore + queryScore) / Math.log(pText.length + 10);
-          pageScores.push({ pNum, totalScore, phraseScore, queryScore });
-        }
-
-        pageScores.sort((a, b) => b.totalScore - a.totalScore);
-        const bestPages = pageScores.slice(0, 3);
-        pageNum = bestPages[0]?.pNum || 1;
-
-        console.log(`ページ特定: ${matchedDoc.name} → ${pageNum}ページ (上位: ${bestPages.map(p => p.pNum + '(p:' + p.phraseScore + ',q:' + p.queryScore + ')').join(', ')})`);
-
-        source = {
-          docName: matchedDoc.name,
-          pageNum,
-          docId,
-          hasImages: matchedDoc.hasImages,
-          topPages: bestPages.map(p => p.pNum)
-        };
-      }
-    }
-
-    // 出典タグを本文から除去 + Markdown記号を除去
-    let cleanText = rawText.replace(/【出典[:：].+?】/g, '').trim();
-    cleanText = cleanText
-      .replace(/\*\*(.+?)\*\*/g, '$1')   // **太字** → 太字
-      .replace(/#{1,6}\s+/g, '')             // ## 見出し → 除去
-      .replace(/^[-*]\s+/gm, '・')           // - リスト → ・
-      .trim();
-
-    res.json({ text: cleanText, source, threadName: thread.name });
-  } catch (err) {
-    console.error('Anthropic API error:', err.message);
-    res.status(500).json({ error: 'AI APIエラー: ' + err.message });
-  }
+  // この新方式ではchatエンドポイントはAI応答は不要
+  // フロントエンドがボタン選択でfind-docを直接呼ぶため
+  // 既存互換のため残す
+  res.json({ text: '', source: null, threadName: '' });
 });
 
 // ----------------------------------------
-// API: ページ画像URL取得
+// API: ページ画像URL取得（単ページ・互換用）
 // ----------------------------------------
 app.get('/api/page-image/:docId/:pageNum', (req, res) => {
   const { docId, pageNum } = req.params;
@@ -455,13 +378,10 @@ app.get('/api/page-image/:docId/:pageNum', (req, res) => {
   const num = parseInt(pageNum);
   let found = null;
 
-  // pagemap.json があればそれを使って正確にページ番号対応
   const pagemapPath = path.join(imgDir, 'pagemap.json');
   if (fs.existsSync(pagemapPath)) {
     const pageMap = JSON.parse(fs.readFileSync(pagemapPath, 'utf8'));
     found = pageMap[num] || null;
-
-    // 見つからない場合：最も近いページにフォールバック
     if (!found) {
       const keys = Object.keys(pageMap).map(Number).sort((a, b) => a - b);
       const closest = keys.reduce((prev, cur) =>
@@ -470,18 +390,13 @@ app.get('/api/page-image/:docId/:pageNum', (req, res) => {
       found = pageMap[closest] || null;
     }
   } else {
-    // pagemap.jsonがない旧データ：インデックスで取得
     const files = fs.readdirSync(imgDir).filter(f => f.endsWith('.png')).sort();
     const target = 'p' + String(num).padStart(3, '0') + '.png';
     found = files.includes(target) ? target : (files[num - 1] || null);
   }
 
-  if (!found) {
-    return res.status(404).json({ error: 'page not found' });
-  }
-
-  const imageUrl = `/page-images/${docId}/${found}`;
-  res.json({ url: imageUrl, filename: found });
+  if (!found) return res.status(404).json({ error: 'page not found' });
+  res.json({ url: `/page-images/${docId}/${found}`, filename: found });
 });
 
 // ----------------------------------------
@@ -495,6 +410,5 @@ app.listen(PORT, () => {
   console.log('');
   if (!ANTHROPIC_API_KEY) {
     console.log('  ⚠️  ANTHROPIC_API_KEY が未設定です。');
-    console.log('     .env ファイルに ANTHROPIC_API_KEY=sk-ant-... を追加してください。');
   }
 });
