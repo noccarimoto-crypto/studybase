@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>資料ビューア</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #1c1c1e; color: #fff; min-height: 100vh; }
+.header { position: sticky; top: 0; background: rgba(28,28,30,0.95); backdrop-filter: blur(10px); padding: 12px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); z-index: 10; }
+.btn-back { padding: 7px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.3); color: #fff; font-size: 13px; background: none; cursor: pointer; }
+.btn-back:hover { background: rgba(255,255,255,0.1); }
+.title { font-size: 15px; font-weight: 600; flex: 1; }
+.page-count { font-size: 12px; color: rgba(255,255,255,0.5); }
+.images { padding: 16px; display: flex; flex-direction: column; gap: 12px; max-width: 900px; margin: 0 auto; }
+.page-img { width: 100%; border-radius: 10px; display: block; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+.loading { text-align: center; padding: 60px; color: rgba(255,255,255,0.5); font-size: 14px; }
+.error { text-align: center; padding: 60px; color: #ff6b6b; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <button class="btn-back" onclick="history.back()">← 戻る</button>
+  <div class="title" id="title">資料を読み込み中...</div>
+  <div class="page-count" id="pageCount"></div>
+</div>
+<div class="images" id="images">
+  <div class="loading">📷 読み込み中...</div>
+</div>
+<script>
+const params = new URLSearchParams(location.search);
+const docId = params.get('docId');
+const docName = params.get('name') || '資料';
+
+document.getElementById('title').textContent = docName;
+
+async function load() {
+  try {
+    const res = await fetch(`/api/all-page-images/${docId}`);
+    const { urls } = await res.json();
+    document.getElementById('pageCount').textContent = `全${urls.length}ページ`;
+    document.getElementById('images').innerHTML = urls.map((url, i) =>
+      `<img class="page-img" src="${url}" alt="${i+1}ページ" loading="lazy">`
+    ).join('');
+  } catch(e) {
+    document.getElementById('images').innerHTML = `<div class="error">⚠️ 読み込みに失敗しました</div>`;
+  }
+}
+load();
+</script>
+</body>
+</html>
