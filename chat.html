@@ -22,7 +22,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-ser
 
 .disclaimer { background: #fff8e6; border-bottom: 1px solid #f0d080; padding: 8px 16px; font-size: 12px; color: #7a5c00; line-height: 1.5; flex-shrink: 0; }
 
-.messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; min-height: 0; height: 0; }
 
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8e8e93; text-align: center; gap: 8px; padding: 60px 0; }
 .empty-state .icon { font-size: 40px; }
@@ -40,17 +40,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-ser
 .btn-option.selected { background: #0071e3; color: #fff; }
 .btn-option:disabled { opacity: 0.45; cursor: default; }
 
-.doc-card { background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); width: 100%; }
-.doc-card-header { padding: 14px 18px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; gap: 10px; }
-.doc-card-icon { font-size: 20px; }
-.doc-card-title { font-size: 14px; font-weight: 600; }
-.doc-card-sub { font-size: 12px; color: #8e8e93; margin-top: 2px; }
-.doc-card-body { padding: 14px 18px; }
-.doc-ref-text { font-size: 14px; color: #3c3c43; margin-bottom: 12px; }
-.page-images { display: flex; flex-direction: column; gap: 10px; }
-.page-img { width: 100%; border-radius: 10px; border: 1px solid #e5e5ea; cursor: pointer; display: block; }
-.page-img:hover { opacity: 0.9; }
-.loading-text { color: #8e8e93; font-size: 13px; padding: 12px 0; text-align: center; }
+/* 資料カード（ボタンのみ） */
+.doc-result { background: #fff; border-radius: 16px; padding: 16px 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); align-self: flex-start; width: 100%; max-width: 480px; }
+.doc-result-name { font-size: 13px; font-weight: 600; color: #1c1c1e; margin-bottom: 4px; }
+.doc-result-sub { font-size: 12px; color: #8e8e93; margin-bottom: 14px; }
+.btn-view { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; border-radius: 20px; border: none; background: #0071e3; color: #fff; font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; }
+.btn-view:hover { background: #0077ed; }
 
 .btn-reset { align-self: center; padding: 10px 20px; border-radius: 20px; border: 1.5px solid #c7c7cc; background: #fff; font-size: 13px; color: #3c3c43; cursor: pointer; font-weight: 500; }
 .btn-reset:hover { background: #f5f5f7; }
@@ -61,11 +56,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-ser
 textarea { flex: 1; border: none; background: none; resize: none; font-size: 14px; line-height: 1.4; max-height: 100px; outline: none; font-family: inherit; }
 .btn-send { width: 36px; height: 36px; border-radius: 50%; border: none; background: #0071e3; color: #fff; font-size: 16px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 .btn-send:disabled { background: #c7c7cc; cursor: default; }
-
-.img-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 999; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
-.img-modal.show { opacity: 1; pointer-events: all; }
-.img-modal img { max-width: 92vw; max-height: 92vh; border-radius: 8px; }
-.img-modal-close { position: absolute; top: 16px; right: 20px; color: #fff; font-size: 28px; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -106,11 +96,6 @@ textarea { flex: 1; border: none; background: none; resize: none; font-size: 14p
   <button class="btn-send" id="sendBtn" onclick="sendMessage()">↑</button>
 </div>
 
-<div class="img-modal" id="imgModal" onclick="closeImgModal()">
-  <span class="img-modal-close">✕</span>
-  <img id="imgModalImg" src="" alt="">
-</div>
-
 <script>
 const API = '';
 let currentThread = null;
@@ -132,7 +117,6 @@ async function selectThread() {
   if (!id) {
     document.getElementById('disclaimer').style.display = 'none';
     document.getElementById('inputBar').style.display = 'none';
-    document.getElementById('emptyState').style.display = '';
     return;
   }
   currentThread = id;
@@ -254,51 +238,38 @@ function askGrade(course) {
   const grades = options.gradesByCourse[course] || [];
   if (grades.length === 0) return;
   appendStepCard('何年生ですか？', grades, async (grade) => {
-    appendAiMsg(`${grade}のご案内です。`);
     await showDoc(course, grade);
   });
 }
 
 async function showDoc(course, grade) {
   const m = document.getElementById('messages');
-
-  const loadCard = document.createElement('div');
-  loadCard.className = 'doc-card';
-  loadCard.innerHTML = `
-    <div class="doc-card-header">
-      <span class="doc-card-icon">📄</span>
-      <div>
-        <div class="doc-card-title">${esc(course)} ${esc(grade)}</div>
-        <div class="doc-card-sub">読み込み中...</div>
-      </div>
-    </div>
-    <div class="doc-card-body"><div class="loading-text">📷 ページ画像を読み込んでいます...</div></div>
-  `;
-  m.appendChild(loadCard);
-  scrollBottom();
+  const loading = appendAiMsg('資料を検索中...');
 
   try {
     const findRes = await fetch(`${API}/api/find-doc?threadId=${currentThread}&course=${encodeURIComponent(course)}&grade=${encodeURIComponent(grade)}`);
+    loading.remove();
+
     if (!findRes.ok) {
-      loadCard.querySelector('.doc-card-body').innerHTML = '<div class="loading-text">⚠️ 該当する資料が見つかりませんでした。</div>';
+      appendAiMsg('該当する資料が見つかりませんでした。');
       appendResetButton();
       return;
     }
-    const { docId, docName } = await findRes.json();
+    const { docId, docName, pageCount } = await findRes.json();
+    const displayName = docName.replace(/\.pdf$/i, '');
+    const viewerUrl = `viewer.html?docId=${encodeURIComponent(docId)}&name=${encodeURIComponent(displayName)}`;
 
-    const imgRes = await fetch(`${API}/api/all-page-images/${docId}`);
-    const { urls } = await imgRes.json();
-
-    loadCard.querySelector('.doc-card-title').textContent = docName.replace(/\.pdf$/i, '');
-    loadCard.querySelector('.doc-card-sub').textContent = `全${urls.length}ページ`;
-    loadCard.querySelector('.doc-card-body').innerHTML = `
-      <div class="doc-ref-text">以下の資料をご確認ください。</div>
-      <div class="page-images">
-        ${urls.map((url, i) => `<img class="page-img" src="${url}" alt="${i+1}ページ" onclick="openImgModal('${escAttr(url)}')" loading="lazy">`).join('')}
-      </div>
+    const card = document.createElement('div');
+    card.className = 'doc-result';
+    card.innerHTML = `
+      <div class="doc-result-name">📄 ${esc(displayName)}</div>
+      <div class="doc-result-sub">以下の資料をご確認ください。</div>
+      <a class="btn-view" href="${viewerUrl}" target="_blank">📖 資料を開く</a>
     `;
+    m.appendChild(card);
   } catch(e) {
-    loadCard.querySelector('.doc-card-body').innerHTML = `<div class="loading-text">⚠️ エラー: ${e.message}</div>`;
+    loading.remove();
+    appendAiMsg('エラーが発生しました。');
   }
 
   appendResetButton();
@@ -319,14 +290,6 @@ function appendResetButton() {
   scrollBottom();
 }
 
-function openImgModal(url) {
-  document.getElementById('imgModalImg').src = url;
-  document.getElementById('imgModal').classList.add('show');
-}
-function closeImgModal() {
-  document.getElementById('imgModal').classList.remove('show');
-}
-
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -335,7 +298,7 @@ function escAttr(s) {
 }
 function scrollBottom() {
   const m = document.getElementById('messages');
-  setTimeout(() => { m.scrollTop = m.scrollHeight; }, 100);
+  setTimeout(() => { m.scrollTop = m.scrollHeight; }, 50);
 }
 
 loadThreads();
