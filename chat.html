@@ -6,7 +6,8 @@
 <title>StudyBase チャット</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f2f2f7; color: #1c1c1e; height: 100vh; display: flex; flex-direction: column; }
+html, body { height: 100%; overflow: hidden; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f2f2f7; color: #1c1c1e; display: flex; flex-direction: column; }
 
 .header { background: #fff; border-bottom: 1px solid #e5e5ea; padding: 12px 16px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .header-icon { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #0071e3, #5856d6); display: flex; align-items: center; justify-content: center; font-size: 16px; }
@@ -21,27 +22,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-ser
 
 .disclaimer { background: #fff8e6; border-bottom: 1px solid #f0d080; padding: 8px 16px; font-size: 12px; color: #7a5c00; line-height: 1.5; flex-shrink: 0; }
 
-.messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
 
-.empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8e8e93; text-align: center; gap: 8px; }
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8e8e93; text-align: center; gap: 8px; padding: 60px 0; }
 .empty-state .icon { font-size: 40px; }
 .empty-state .title { font-size: 16px; font-weight: 600; color: #3c3c43; }
 .empty-state .sub { font-size: 13px; }
 
-/* バブル */
 .bubble-user { align-self: flex-end; background: #0071e3; color: #fff; padding: 10px 14px; border-radius: 18px 18px 4px 18px; font-size: 14px; line-height: 1.6; max-width: 80%; }
 .bubble-ai { align-self: flex-start; background: #fff; color: #1c1c1e; padding: 10px 14px; border-radius: 18px 18px 18px 4px; font-size: 14px; line-height: 1.6; max-width: 85%; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
 
-/* ステップカード */
 .step-card { background: #fff; border-radius: 16px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); align-self: flex-start; width: 100%; max-width: 480px; }
 .step-question { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #1c1c1e; }
 .btn-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .btn-option { padding: 9px 16px; border-radius: 20px; border: 1.5px solid #0071e3; color: #0071e3; font-size: 13px; font-weight: 500; background: #fff; cursor: pointer; transition: all 0.15s; }
 .btn-option:hover { background: #e8f0fe; }
-.btn-option.selected { background: #0071e3; color: #fff; border-color: #0071e3; }
+.btn-option.selected { background: #0071e3; color: #fff; }
 .btn-option:disabled { opacity: 0.45; cursor: default; }
 
-/* 資料カード */
 .doc-card { background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); width: 100%; }
 .doc-card-header { padding: 14px 18px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; gap: 10px; }
 .doc-card-icon { font-size: 20px; }
@@ -54,10 +52,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-ser
 .page-img:hover { opacity: 0.9; }
 .loading-text { color: #8e8e93; font-size: 13px; padding: 12px 0; text-align: center; }
 
-.btn-reset { align-self: center; padding: 10px 20px; border-radius: 20px; border: 1.5px solid #c7c7cc; background: #fff; font-size: 13px; color: #3c3c43; cursor: pointer; font-weight: 500; margin-top: 4px; }
+.btn-reset { align-self: center; padding: 10px 20px; border-radius: 20px; border: 1.5px solid #c7c7cc; background: #fff; font-size: 13px; color: #3c3c43; cursor: pointer; font-weight: 500; }
 .btn-reset:hover { background: #f5f5f7; }
 
-/* 入力欄 */
 .input-bar { background: #fff; border-top: 1px solid #e5e5ea; padding: 10px 12px; display: flex; align-items: flex-end; gap: 8px; flex-shrink: 0; }
 .input-wrap { flex: 1; border: 1px solid #c7c7cc; border-radius: 20px; padding: 8px 14px; display: flex; align-items: center; background: #f9f9f9; }
 .input-wrap:focus-within { border-color: #0071e3; background: #fff; }
@@ -65,7 +62,6 @@ textarea { flex: 1; border: none; background: none; resize: none; font-size: 14p
 .btn-send { width: 36px; height: 36px; border-radius: 50%; border: none; background: #0071e3; color: #fff; font-size: 16px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 .btn-send:disabled { background: #c7c7cc; cursor: default; }
 
-/* 画像拡大モーダル */
 .img-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 999; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
 .img-modal.show { opacity: 1; pointer-events: all; }
 .img-modal img { max-width: 92vw; max-height: 92vh; border-radius: 8px; }
@@ -118,8 +114,7 @@ textarea { flex: 1; border: none; background: none; resize: none; font-size: 14p
 <script>
 const API = '';
 let currentThread = null;
-let options = null; // { courses, gradesByCourse }
-let selectedCourse = null;
+let options = null;
 let isSending = false;
 
 async function loadThreads() {
@@ -141,13 +136,11 @@ async function selectThread() {
     return;
   }
   currentThread = id;
-  selectedCourse = null;
   document.getElementById('headerName').textContent = name;
   document.getElementById('disclaimer').style.display = '';
   document.getElementById('inputBar').style.display = 'flex';
   document.getElementById('emptyState').style.display = 'none';
 
-  // オプション読み込み
   const res = await fetch(`${API}/api/options?threadId=${currentThread}`);
   options = await res.json();
 
@@ -156,9 +149,6 @@ async function selectThread() {
   document.getElementById('chatInput').focus();
 }
 
-// ----------------------------------------
-// メッセージ追加
-// ----------------------------------------
 function clearMessages() {
   document.getElementById('messages').innerHTML = '';
 }
@@ -194,7 +184,6 @@ function appendStepCard(question, buttons, onSelect) {
   `;
   card.querySelectorAll('.btn-option').forEach(btn => {
     btn.addEventListener('click', () => {
-      // 全ボタン無効化・選択表示
       card.querySelectorAll('.btn-option').forEach(b => {
         b.disabled = true;
         if (b.dataset.val === btn.dataset.val) b.classList.add('selected');
@@ -206,9 +195,6 @@ function appendStepCard(question, buttons, onSelect) {
   scrollBottom();
 }
 
-// ----------------------------------------
-// 送信
-// ----------------------------------------
 function handleKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 }
@@ -229,7 +215,6 @@ async function sendMessage() {
   isSending = true;
   document.getElementById('sendBtn').disabled = true;
 
-  // AIにコース・学年を判定させる
   const thinking = appendAiMsg('...');
   try {
     const res = await fetch(API + '/api/identify', {
@@ -241,16 +226,11 @@ async function sendMessage() {
     thinking.remove();
 
     if (data.course && data.grade) {
-      // コース・学年確定 → 資料表示
-      selectedCourse = data.course;
       await showDoc(data.course, data.grade);
     } else if (data.course) {
-      // コースのみ確定 → 学年選択
-      selectedCourse = data.course;
       appendAiMsg(`「${data.course}」についてのご質問ですね。`);
       askGrade(data.course);
     } else {
-      // 特定できず → コース選択
       appendAiMsg('どちらのコースにお通いですか？');
       askCourse();
     }
@@ -265,7 +245,6 @@ async function sendMessage() {
 function askCourse() {
   if (!options || options.courses.length === 0) return;
   appendStepCard('どちらのコースにお通いですか？', options.courses, (course) => {
-    selectedCourse = course;
     appendAiMsg(`「${course}」ですね。`);
     askGrade(course);
   });
@@ -305,7 +284,7 @@ async function showDoc(course, grade) {
       appendResetButton();
       return;
     }
-    const { docId, docName, pageCount } = await findRes.json();
+    const { docId, docName } = await findRes.json();
 
     const imgRes = await fetch(`${API}/api/all-page-images/${docId}`);
     const { urls } = await imgRes.json();
@@ -332,7 +311,6 @@ function appendResetButton() {
   btn.className = 'btn-reset';
   btn.textContent = '🔄 他のコース・学年を調べる';
   btn.onclick = () => {
-    selectedCourse = null;
     clearMessages();
     appendAiMsg('他にご質問はありますか？');
     askCourse();
@@ -357,7 +335,7 @@ function escAttr(s) {
 }
 function scrollBottom() {
   const m = document.getElementById('messages');
-  setTimeout(() => m.scrollTop = m.scrollHeight, 50);
+  setTimeout(() => { m.scrollTop = m.scrollHeight; }, 100);
 }
 
 loadThreads();
